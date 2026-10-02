@@ -84252,7 +84252,7 @@ var EditorSessions = class {
 var editorSessions = new EditorSessions();
 
 // src/server/server.ts
-var EDITOR_URI = "ui://word-in-gpt/editor-v5";
+var EDITOR_URI = "ui://word-in-gpt/editor-v6";
 var MCP_APP_MIME_TYPE = "text/html;profile=mcp-app";
 var fileEntrypointInput = { file: external_exports.object({ name: external_exports.string(), resourceUri: external_exports.string() }) };
 function createServer(editorHtml, iconSvg, localFiles, sessions = editorSessions) {

@@ -6,7 +6,7 @@ import type { LocalFiles } from "./local-files.ts";
 
 // The URI is the host's cache key for the UI: change it when the app changes
 // in a way an already-open editor cannot load.
-const EDITOR_URI = "ui://word-in-gpt/editor-v5";
+const EDITOR_URI = "ui://word-in-gpt/editor-v6";
 const MCP_APP_MIME_TYPE = "text/html;profile=mcp-app";
 
 // What the host passes to a file entrypoint tool when the user opens a matching file.

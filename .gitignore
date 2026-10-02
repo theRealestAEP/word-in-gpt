@@ -13,5 +13,6 @@ dev/*.docx
 dev/*.jpg
 !dev/add-to-chat-menu.jpg
 !dev/selection-comments-fixed.jpg
+!dev/selection-toolbar-fixed.jpg
 publication/upload-draft/
 publication/website/deploy-staging.json

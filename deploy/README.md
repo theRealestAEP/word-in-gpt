@@ -5,7 +5,7 @@ This repository deploys the MCP service as `word-in-gpt-mcp` in the same account
 Its configuration is `../wrangler.jsonc`.
 
 Verified endpoint: `https://word-in-gpt-mcp.callerinfo.workers.dev/mcp`.
-Updated October 1, 2026 (Pacific time), version `415e20d2-790f-4b28-9760-ccae06682ca2`.
+Updated October 2, 2026 (Pacific time), version `c72ad163-52c4-4322-ad3e-a2c95122a8ba`.
 The public HTTPS check passed for health, tool discovery, editor HTML, URI
 handling, command routing, and session isolation.
 

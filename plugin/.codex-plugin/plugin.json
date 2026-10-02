@@ -1,6 +1,6 @@
 {
   "name": "word-in-gpt",
-  "version": "0.1.0+codex.20261002041016",
+  "version": "0.1.0+codex.20261002170530",
   "description": "View and edit Word .docx files with Word-level fidelity, together with the model.",
   "author": {
     "name": "Alex Pickett",

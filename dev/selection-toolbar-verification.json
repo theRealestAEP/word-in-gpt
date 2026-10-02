@@ -1,0 +1,35 @@
+{
+  "date": "2026-10-02",
+  "installedVersion": "0.1.0+codex.20261002170530",
+  "environment": "Codex in-app browser, local mock host, actual built Word editor",
+  "fixture": "dev/selection-review.docx",
+  "beforeFix": {
+    "rightClickDisabledAddToChat": true
+  },
+  "afterFix": {
+    "rightClickRetainedTwoParagraphHighlights": true,
+    "controlClickRetainedTwoParagraphHighlights": true,
+    "sharedText": "Quarterly review\nRevenue increased this quarter.",
+    "singleWordRightClickSharedText": "Revenue",
+    "primaryClickClearedSelection": true,
+    "buttonPositionAcrossSavedAndUnsavedStates": [
+      { "viewportWidth": 709, "x": 601.046875, "y": 10, "width": 91.953125, "height": 27 },
+      { "viewportWidth": 360, "x": 252.046875, "y": 10, "width": 91.953125, "height": 27 }
+    ],
+    "savingStatePositionMeasured": false,
+    "screenshot": "dev/selection-toolbar-fixed.jpg"
+  },
+  "checks": {
+    "typecheck": "passed",
+    "unitTests": "8 passed",
+    "isolatedBundledPlugin": "passed",
+    "hostedHttpCheck": "passed",
+    "hostedEditorMatchesBuild": true
+  },
+  "hosted": {
+    "workerVersion": "c72ad163-52c4-4322-ad3e-a2c95122a8ba",
+    "editorUri": "ui://word-in-gpt/editor-v6",
+    "editorSha256": "559d0058b2d352d951c68f46369fcde4c2bed1b5d9685fd149fef941d52cb070"
+  },
+  "nativeUpdatedUi": "Pending Codex restart; the current chat still loads the previous build"
+}

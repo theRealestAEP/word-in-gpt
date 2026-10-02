@@ -53,14 +53,23 @@ export function App({ controller }: { controller: EditorController }) {
   }, [doc, connection, shareSelection]);
 
   return (
-    <div className="editor">
+    <div className="editor" onMouseUpCapture={event => {
+      // WordInWeb's mouseup handler places the caret. Context clicks must keep
+      // the selection, including Control-click on macOS.
+      if ((event.target as Element).closest(".document") &&
+          (event.button !== 0 || (event.ctrlKey && /Mac|iPhone|iPad/.test(navigator.platform)))) {
+        event.stopPropagation();
+      }
+    }}>
       <div className="status-bar" role="status">
         <span className="file-name">{file?.name ?? "Word"}</span>
-        <span>{status}</span>
-        <span>{connection}</span>
         <button className="share-selection" disabled={!selection.length || connection !== "Chat connected"}
           onMouseDown={event => event.preventDefault()} onClick={() => shareSelection(selection)}>Add to chat</button>
-        {selectionStatus && <span>{selectionStatus}</span>}
+        <div className="document-status">
+          <span className="save-status">{status}</span>
+          <span>{connection}</span>
+          {selectionStatus && <span>{selectionStatus}</span>}
+        </div>
         {conflict && (
           <span className="conflict">
             Another program changed this file while you had unsaved edits.
