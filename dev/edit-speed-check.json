@@ -1,0 +1,20 @@
+{
+  "fixture": "dev/sample.docx",
+  "scope": "Headless plugin adapter; same body window. Excludes model inference, network and autosave.",
+  "simple": {
+    "milliseconds": 5.63,
+    "bytes": 29942,
+    "mode": "text",
+    "lines": 161,
+    "truncated": false
+  },
+  "detailed": {
+    "milliseconds": 2.55,
+    "bytes": 196635,
+    "blocks": 161,
+    "truncated": false
+  },
+  "payloadReductionPercent": 85,
+  "simpleEditCalls": 2,
+  "detailedEditCalls": 3
+}

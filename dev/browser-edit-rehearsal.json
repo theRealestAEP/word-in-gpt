@@ -1,0 +1,40 @@
+{
+  "scope": "Local browser host rehearsal, with actual MCP relay, compact content rewrite, formatting, and host autosave. Public portal review cases remain pending.",
+  "evidence": [
+    {
+      "tool": "word_document_inspect",
+      "milliseconds": 36,
+      "saveStatus": "Save status: Saved"
+    },
+    {
+      "tool": "word_document_inspect",
+      "milliseconds": 22,
+      "saveStatus": "Save status: Saved"
+    },
+    {
+      "tool": "word_document_project",
+      "milliseconds": 23,
+      "saveStatus": "Save status: Saved"
+    },
+    {
+      "tool": "word_document_patch",
+      "milliseconds": 37,
+      "saveStatus": "Save status: Saved"
+    },
+    {
+      "tool": "word_document_inspect",
+      "milliseconds": 20,
+      "saveStatus": "Save status: Saved"
+    },
+    {
+      "tool": "word_document_capabilities",
+      "milliseconds": 22,
+      "saveStatus": "Save status: Saved"
+    },
+    {
+      "tool": "word_document_edit",
+      "milliseconds": 31,
+      "saveStatus": "Save status: Saved"
+    }
+  ]
+}

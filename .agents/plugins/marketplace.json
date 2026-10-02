@@ -1,0 +1,20 @@
+{
+  "name": "word-in-gpt",
+  "interface": {
+    "displayName": "Word in GPT"
+  },
+  "plugins": [
+    {
+      "name": "word-in-gpt",
+      "source": {
+        "source": "local",
+        "path": "./plugin"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

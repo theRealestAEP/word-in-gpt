@@ -1,0 +1,29 @@
+{
+  "archive": "/Users/alexpickett/Desktop/Projects/word-in-gpt/publication/submission-draft.zip",
+  "fileCount": 10,
+  "bytes": 46790,
+  "pngDimensions": [
+    512,
+    512
+  ],
+  "status": "Draft; live listing URLs verified; privacy notice remains a draft",
+  "missing": [
+    "Privacy notice finalization: support-email retention",
+    "demo_recording_url",
+    "country targeting confirmation",
+    "exact verified publisher name confirmation",
+    "saved public-version review cases and portal checks"
+  ],
+  "inventory": [
+    "word-in-gpt/assets/icon.png",
+    "word-in-gpt/fixtures/review.docx",
+    "word-in-gpt/mcp.json",
+    "word-in-gpt/plugin.json",
+    "word-in-gpt/skills/word-editor/SKILL.md",
+    "word-in-gpt/skills/wordinweb-documents/SKILL.md",
+    "word-in-gpt/skills/wordinweb-documents/agents/openai.yaml",
+    "word-in-gpt/skills/wordinweb-documents/references/create.md",
+    "word-in-gpt/skills/wordinweb-documents/references/inspect-edit.md",
+    "word-in-gpt/skills/wordinweb-documents/references/interface.md"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "word-in-gpt-mcp": {
+    "observability": null,
+    "logpush": false
+  },
+  "wordinweb-parity": {
+    "observability": null,
+    "logpush": false
+  }
+}

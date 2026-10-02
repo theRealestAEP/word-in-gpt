@@ -1,0 +1,7 @@
+[
+  {
+    "hostname": "word-in-web.com",
+    "service": "wordinweb-parity",
+    "environment": "production"
+  }
+]

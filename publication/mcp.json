@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "word-in-gpt": {
+      "type": "streamable-http",
+      "url": "https://word-in-gpt-mcp.callerinfo.workers.dev/mcp"
+    }
+  }
+}

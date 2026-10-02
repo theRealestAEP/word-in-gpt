@@ -1,0 +1,125 @@
+/* Host theme variables come from the MCP Apps host; the fallbacks cover a plain browser. */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font: 13px var(--font-sans, system-ui, sans-serif);
+  color: var(--color-text-primary, CanvasText);
+  background: var(--color-background-primary, Canvas);
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.status-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--color-border-primary, #dadce0);
+  color: var(--color-text-secondary, #5f6368);
+}
+
+.file-name {
+  font-weight: 600;
+  color: var(--color-text-primary, CanvasText);
+}
+
+.conflict {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  color: var(--color-text-danger, #b3261e);
+}
+
+.conflict button {
+  font: inherit;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.document {
+  flex: 1;
+  min-height: 0;
+  --dxw-comment-bg: var(--color-background-primary, #fff);
+  --dxw-comment-fg: var(--color-text-primary, #3c4043);
+  --dxw-comment-border: var(--color-border-primary, #dadce0);
+}
+
+.share-selection {
+  font: inherit;
+  padding: 5px 10px;
+  border: 1px solid var(--color-border-primary, #dadce0);
+  border-radius: 6px;
+  color: var(--color-text-primary, CanvasText);
+  background: var(--color-background-secondary, Canvas);
+  cursor: pointer;
+}
+
+.share-selection:disabled { opacity: .5; cursor: default; }
+
+.add-to-chat-menu-item {
+  display: block;
+  width: 100%;
+  padding: 7px 9px;
+  margin-bottom: 4px;
+  border: 0;
+  border-bottom: 1px solid #e8eaed;
+  border-radius: 5px;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  color: #202124;
+  background: transparent;
+  cursor: pointer;
+}
+
+.add-to-chat-menu-item:hover,
+.add-to-chat-menu-item:focus-visible { background: #f1f3f4; }
+
+.document .dxw-comment-reply-input,
+.document .dxw-comment-edit-input {
+  color: var(--dxw-comment-fg);
+  background: var(--color-background-secondary, #f8f9fa);
+  border-color: var(--dxw-comment-border);
+}
+
+.document .dxw-comment-date,
+.document .dxw-comment-delete,
+.document .dxw-comment-resolve,
+.document .dxw-comment-edit {
+  color: var(--color-text-secondary, #5f6368);
+}
+
+.document .dxw-comment-card:focus-within .dxw-comment-resolve,
+.document .dxw-comment-card:focus-within .dxw-comment-edit {
+  visibility: visible;
+}
+
+/* Give the expanded ribbon the full row instead of the space left by the tabs. */
+.word-toolbar:has([data-dxw-toolbar-expand][aria-expanded="true"]) > div:has(> [data-dxw-toolbar-ribbon]) {
+  flex: 1 1 100% !important;
+  order: 2 !important;
+}
+
+.word-toolbar:has([data-dxw-toolbar-expand][aria-expanded="true"]) [data-dxw-ribbon-break] {
+  display: none !important;
+}
+
+.word-toolbar {
+  flex-shrink: 0;
+}
+
+.empty {
+  padding: 24px;
+}

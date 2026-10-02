@@ -1,0 +1,40 @@
+{
+  "name": "word-in-gpt",
+  "version": "0.1.0+codex.20261002041016",
+  "description": "View and edit Word .docx files with Word-level fidelity, together with the model.",
+  "author": {
+    "name": "Alex Pickett",
+    "url": "https://word-in-web.com/"
+  },
+  "homepage": "https://word-in-web.com/",
+  "license": "MIT",
+  "keywords": [
+    "word",
+    "docx",
+    "document",
+    "editor",
+    "office"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Word",
+    "shortDescription": "View and edit .docx files",
+    "longDescription": "Open any .docx file in a high-fidelity Word editor. The editor lays out pages the way Word does. You and the model edit the same open document, and every change saves back to the file.",
+    "developerName": "Alex Pickett",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://word-in-web.com/",
+    "composerIcon": "./assets/icon.svg",
+    "logo": "./assets/icon.svg",
+    "defaultPrompt": [
+      "Tighten the wording in the open document",
+      "Add a summary table to the open document"
+    ],
+    "brandColor": "#2B579A"
+  }
+}

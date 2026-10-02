@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "word-in-gpt-mcp",
+  "account_id": "08d4b257b06d9963dceb8819bd226c35",
+  "main": "src/server/worker.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "build": {
+    "command": "npm run build:worker-assets"
+  },
+  "assets": {
+    "directory": "./deploy/worker-assets",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "EDITOR_RELAY", "class_name": "WordEditorRelay" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["WordEditorRelay"] }]
+}

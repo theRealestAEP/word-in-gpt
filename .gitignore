@@ -1,0 +1,17 @@
+node_modules/
+.wrangler/
+deploy/worker-assets/
+dev/integration-test.docx
+dev/integration-live.docx
+dev/live-edit-verification.jpg
+.env
+.env.*
+!.env.example
+dev/*.docx
+!dev/sample.docx
+!dev/selection-review.docx
+dev/*.jpg
+!dev/add-to-chat-menu.jpg
+!dev/selection-comments-fixed.jpg
+publication/upload-draft/
+publication/website/deploy-staging.json

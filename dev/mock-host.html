@@ -1,0 +1,137 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Mock MCP host</title>
+<style>
+html,body{margin:0;height:100%}
+body{display:flex;flex-direction:column;font:12px system-ui;color:#475569;background:#f8fafc}
+header{padding:8px 16px;border-bottom:1px solid #e2e8f0}
+summary{cursor:pointer;font-weight:600}
+.diagnostics{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-top:10px}
+button{font:inherit;font-weight:600;color:#1d4ed8;background:white;border:1px solid #cbd5e1;border-radius:6px;padding:6px 10px;cursor:pointer}
+iframe{width:100%;flex:1;min-height:0;border:0}
+</style></head>
+<body>
+<header><details><summary>Local editor demo · changes stay in memory</summary><div class="diagnostics"><button id="test">Test live editing</button><output id="result">Ready to test tool discovery, editing, and autosave.</output></div><pre id="model-context" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></details></header>
+<iframe id="app" src="../plugin/dist/app.html"></iframe>
+<script>
+// Mock of the ChatGPT desktop host side of the MCP Apps + OpenAI file-entrypoint protocol.
+const frame = document.getElementById("app");
+const uri = "host-resource://test-docx";
+const saveToDisk = new URLSearchParams(location.search).get("save") === "1";
+const localLauncher = new URLSearchParams(location.search).get("local") === "1";
+if (saveToDisk) document.querySelector("summary").textContent = "Integration test · saves dev/integration-live.docx";
+let editorSessionId;
+const mcp = async (method, params) => {
+  const response = await fetch("/mcp", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: nextId++, method, params }) });
+  const message = await response.json();
+  if (message.error) throw new Error(message.error.message);
+  return message.result;
+};
+const log = (window.hostLog = []);
+let bytesB64 = null, version = 1, nextId = 1000;
+const pending = new Map();
+window.disk = { get b64() { return bytesB64; }, get etag() { return "v" + version; }, writes: 0 };
+fetch(new URLSearchParams(location.search).get("file") ?? "sample.docx").then(r => r.arrayBuffer()).then(buf => {
+  let bin = ""; const b = new Uint8Array(buf);
+  for (let i = 0; i < b.length; i += 0x8000) bin += String.fromCharCode(...b.subarray(i, i + 0x8000));
+  bytesB64 = btoa(bin);
+});
+const send = (msg) => frame.contentWindow.postMessage({ jsonrpc: "2.0", ...msg }, "*");
+// Host -> app request (e.g. tools/call into the app's live tools).
+window.callApp = (method, params) => new Promise((resolve, reject) => {
+  const id = nextId++; pending.set(id, { resolve, reject }); send({ id, method, params });
+});
+// Simulate another program changing the file on disk.
+window.externalChange = (b64) => { bytesB64 = b64; version++; send({ method: "notifications/resources/updated", params: { uri } }); };
+document.getElementById("test").onclick = async () => {
+  const button = document.getElementById("test");
+  const output = document.getElementById("result");
+  button.disabled = true;
+  output.textContent = "Checking tool discovery, editing, and autosave…";
+  const callTool = async (name, args) => {
+    const result = await mcp("tools/call", { name, arguments: { ...args, editorSessionId } });
+    if (result.isError) throw new Error(result.content[0].text);
+    return JSON.parse(result.content[0].text);
+  };
+  try {
+    if (!editorSessionId) throw new Error("The editor has not connected its server tools.");
+    const discovery = await mcp("tools/list", {});
+    const tools = discovery.tools.filter(tool => tool.name.startsWith("word_document_"));
+    if (!tools.some(tool => tool.name === "word_document_edit")) throw new Error("Editing tool was not advertised.");
+    await callTool("word_document_capabilities", { kind: "insertText" });
+    const context = await callTool("word_document_inspect", { kind: "context" });
+    const block = context.contents.find(story => story.story === "body").blocks.find(block => block.type === "paragraph" && block.text.trim());
+    const marker = "[Live edit passed] ";
+    const previousWrites = window.disk.writes;
+    await callTool("word_document_edit", { revision: context.revision, operations: [{
+      kind: "insertText", at: { blockRef: block.ref, runRef: block.runs[0].ref, offset: 0 }, text: marker,
+    }] });
+    const updated = await callTool("word_document_inspect", { kind: "context" });
+    if (!updated.contents.some(story => story.blocks.some(block => block.text?.startsWith(marker)))) throw new Error("The edit was not visible to inspection.");
+    const deadline = Date.now() + 5000;
+    while (window.disk.writes === previousWrites && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 50));
+    if (window.disk.writes === previousWrites) throw new Error("Autosave did not write the edited document.");
+    output.textContent = `Passed: ${tools.length} server tools discovered, title edited through MCP, document autosaved${saveToDisk ? " to dev/integration-live.docx" : " in memory"}.`;
+  } catch (error) {
+    output.textContent = `Failed: ${error.message}`;
+  } finally {
+    button.disabled = false;
+  }
+};
+const handlers = {
+  "tools/call": async (p) => {
+    const result = await mcp("tools/call", p);
+    if (p.name === "word_local_write" && result.structuredContent?.outcome === "saved") window.disk.writes++;
+    return result;
+  },
+  "ui/update-model-context": (p) => {
+    const text = p.content.map(block => block.text ?? "").join(" ");
+    document.getElementById("model-context").textContent = text;
+    editorSessionId = text.match(/editorSessionId ([a-f0-9-]+)/)?.[1];
+    return {};
+  },
+  "ui/initialize": () => ({ protocolVersion: "2026-01-26", hostInfo: { name: "mock-host", version: "0" },
+    hostCapabilities: { experimental: { "openai/resource": {} } }, hostContext: {} }),
+  "resources/subscribe": () => ({}),
+  "resources/read": async (p) => {
+    const snapshot = saveToDisk ? await (await fetch("/document")).json() : { blob: bytesB64, etag: "v" + version };
+    return { contents: [{ uri: p.uri, mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      blob: snapshot.blob, _meta: { "openai/resource": { etag: snapshot.etag, writable: true } } }] };
+  },
+  "openai/resources/write": async (p) => {
+    if (saveToDisk) {
+      const response = await fetch("/document", { method: "PUT", headers: p.ifMatch ? { "If-Match": p.ifMatch } : {}, body: Uint8Array.from(atob(p.blob), char => char.charCodeAt(0)) });
+      const result = await response.json();
+      if (response.ok) window.disk.writes++;
+      return { outcome: response.ok ? "saved" : "conflict", etag: result.etag };
+    }
+    if (p.ifMatch && p.ifMatch !== "v" + version) return { outcome: "conflict", etag: "v" + version };
+    bytesB64 = p.blob; version++; window.disk.writes++;
+    setTimeout(() => send({ method: "notifications/resources/updated", params: { uri } }), 10);
+    return { outcome: "saved", etag: "v" + version };
+  },
+};
+window.addEventListener("message", async (e) => {
+  if (e.source !== frame.contentWindow) return;
+  const m = e.data; log.push(m.method ?? ("response " + m.id));
+  if (m.method && m.id != null) {
+    const h = handlers[m.method];
+    if (!h) return send({ id: m.id, error: { code: -32601, message: "no " + m.method } });
+    while (!bytesB64) await new Promise(r => setTimeout(r, 20));
+    try { send({ id: m.id, result: await h(m.params) }); }
+    catch (error) { send({ id: m.id, error: { code: -32603, message: error.message } }); }
+  } else if (m.method === "ui/notifications/initialized") {
+    if (localLauncher) {
+      const file = await (await fetch("/local-file")).json();
+      send({ method: "ui/notifications/tool-input", params: { arguments: { file } } });
+      const result = await mcp("tools/call", { name: "open_word_document", arguments: { file } });
+      send({ method: "ui/notifications/tool-result", params: result });
+      return;
+    }
+    send({ method: "ui/notifications/tool-input", params: { arguments: { file: { name: saveToDisk ? "integration-live.docx" : "sample.docx", resourceUri: uri } } } });
+  } else if (!m.method && pending.has(m.id)) {
+    const p = pending.get(m.id); pending.delete(m.id);
+    m.error ? p.reject(new Error(m.error.message)) : p.resolve(m.result);
+  }
+});
+</script>
+</body></html>

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "word-in-gpt": {
+      "command": "node",
+      "args": ["./dist/server.mjs"],
+      "cwd": "."
+    }
+  }
+}

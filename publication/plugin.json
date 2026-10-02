@@ -1,0 +1,100 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "word-in-gpt",
+  "version": "0.1.0",
+  "description": "View and edit .docx files together with chat.",
+  "author": {
+    "name": "Alex Pickett",
+    "url": "https://word-in-web.com/"
+  },
+  "license": "MIT",
+  "keywords": [
+    "word",
+    "docx",
+    "document",
+    "editor",
+    "office"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Word",
+        "shortDescription": "View and edit .docx files",
+        "longDescription": "Open Word documents in a page-layout editor. Read, search, and rewrite text with chat while keeping existing styles. Apply formatting, edit tables, and adjust page layout. Highlight a passage and choose Add to chat from the toolbar or the first item in the right-click menu. Review comments alongside the document. Changes save back to the opened file.",
+        "category": "Productivity",
+        "capabilities": [
+          "Interactive",
+          "Read",
+          "Write"
+        ],
+        "composerIcon": "./assets/icon.png",
+        "logo": "./assets/icon.png",
+        "defaultPrompt": [
+          "Tighten the wording in the open document",
+          "Add a summary table to the open document"
+        ],
+        "brandColor": "#2B579A",
+        "developerName": "Alex Pickett",
+        "websiteURL": "https://word-in-web.com/word-plugin/",
+        "supportURL": "https://word-in-web.com/word-plugin/support",
+        "privacyPolicyURL": "https://word-in-web.com/word-plugin/privacy",
+        "termsOfServiceURL": "https://word-in-web.com/word-plugin/terms"
+      },
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Open a document in the native host. Use a disposable .docx named review.docx with two body paragraphs: Quarterly review and Revenue increased this quarter. Start each case from an unchanged copy. Use a copy of fixtures/review.docx. In the desktop host, select the file and open it in Word using the host-granted resource URI. Wait for Chat connected. ",
+              "prompt": "Open review.docx in Word so I can edit it.",
+              "tools_triggered": "open_word_document",
+              "expected_behavior": "The desktop host calls open_word_document with file.name review.docx and its actual host-granted resource URI. The returned file descriptor preserves that URI. The native Word panel displays review.docx and Chat connected. Use the editorSessionId supplied by the editor context for subsequent document calls."
+            },
+            {
+              "description": "Read the document without changing it. Use a disposable .docx named review.docx with two body paragraphs: Quarterly review and Revenue increased this quarter. Start each case from an unchanged copy. Use a copy of fixtures/review.docx. In the desktop host, select the file and open it in Word using the host-granted resource URI. Wait for Chat connected. ",
+              "prompt": "Summarize the open document in one sentence.",
+              "tools_triggered": "word_document_inspect",
+              "expected_behavior": "Call word_document_inspect with kind context and the session ID for review.docx. Summarize the quarterly review and increased revenue using the returned text. File content stays unchanged."
+            },
+            {
+              "description": "Search a known phrase. Use a disposable .docx named review.docx with two body paragraphs: Quarterly review and Revenue increased this quarter. Start each case from an unchanged copy. Use a copy of fixtures/review.docx. In the desktop host, select the file and open it in Word using the host-granted resource URI. Wait for Chat connected. ",
+              "prompt": "Find every occurrence of Revenue in the open document.",
+              "tools_triggered": "word_document_inspect",
+              "expected_behavior": "Call word_document_inspect with kind search, query Revenue, and the current session ID. Report the one matching paragraph using the returned references. File content stays unchanged."
+            },
+            {
+              "description": "Rewrite content while preserving formatting. Use an unchanged copy of fixtures/review.docx, opened in the desktop editor with its host-granted URI. Wait for Chat connected.",
+              "prompt": "Change Revenue increased this quarter. to Revenue grew this quarter. Keep the existing formatting.",
+              "tools_triggered": "word_document_project, word_document_patch",
+              "expected_behavior": "Read the body with word_document_project in text mode. Apply a line-range word_document_patch in text mode using the returned revision and window. The body becomes Revenue grew this quarter. The Quarterly review heading, paragraph styles and run formatting remain intact. Confirm Saved status and the persisted text in the reopened DOCX."
+            },
+            {
+              "description": "Format a paragraph and preserve its text. Use a disposable .docx named review.docx with two body paragraphs: Quarterly review and Revenue increased this quarter. Start each case from an unchanged copy. Use a copy of fixtures/review.docx. In the desktop host, select the file and open it in Word using the host-granted resource URI. Wait for Chat connected. ",
+              "prompt": "Center the Quarterly review heading.",
+              "tools_triggered": "word_document_inspect, word_document_capabilities, word_document_edit",
+              "expected_behavior": "Inspect the document, obtain the formatParagraph schema, then apply formatParagraph with align center to the observed heading block using the latest revision and session ID. Confirm centered text in the native panel and saved DOCX paragraph alignment. Paragraph text stays intact."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Email delivery is outside the plugin tool set. Explain that sending requires an email service and recipient details. Keep the document unchanged and make no Word tool calls for sending.",
+              "prompt": "Email the open document to my accountant."
+            },
+            {
+              "description": "The plugin has no purchasing or checkout tool. Explain that a software purchase requires a separate vendor workflow. Make no Word tool calls and claim no purchase.",
+              "prompt": "Buy a Microsoft 365 subscription for me."
+            },
+            {
+              "description": "The plugin has no cloud-drive search or account enumeration tool. Explain that a connected Drive service or a selected file is needed. Make no Word tool calls for account discovery.",
+              "prompt": "Find all the Word documents in my Google Drive account."
+            }
+          ]
+        },
+        "commerce": false,
+        "commerce_description": "The plugin is available without payments."
+      },
+      "publication": {
+        "release_notes": "Initial release: view and edit Word documents with chat, use a compact two-call path for wording changes, apply detailed formatting and layout operations, add highlighted text to chat from the first right-click item, review comments, and save changes to the opened file."
+      }
+    }
+  }
+}

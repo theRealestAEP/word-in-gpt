@@ -1,0 +1,25 @@
+{
+  "status": "Published on word-in-web.com; privacy remains a draft",
+  "build": "Existing WordInWeb website build passed",
+  "pages": [
+    "index.html",
+    "support.html",
+    "privacy.html",
+    "terms.html"
+  ],
+  "checks": [
+    "One main heading per page",
+    "All relative links resolve",
+    "All pages include supplied support email",
+    "No scripts or forms in new pages",
+    "WordInWeb MIT license reproduced exactly",
+    "Built page copies match prepared source",
+    "Browser navigation and visible content checked"
+  ],
+  "supportEmail": "alex@cobbery.com",
+  "privacyPending": [
+    "Support-email retention"
+  ],
+  "screenshot": "support-published.png",
+  "deploymentVersion": "fbc2a66b-b9ad-490d-a9b5-a3030e6b5f64"
+}

@@ -1,0 +1,37 @@
+[
+  {
+    "file": "index.html",
+    "requested": "https://word-in-web.com/word-plugin/index.html",
+    "url": "https://word-in-web.com/word-plugin/",
+    "status": 200,
+    "sha256": "1a0efbbd1b5f5d6e98a19d1d6d3c68b0432cde3d75fd9fdc999b64d7e5de26f4"
+  },
+  {
+    "file": "support.html",
+    "requested": "https://word-in-web.com/word-plugin/support.html",
+    "url": "https://word-in-web.com/word-plugin/support",
+    "status": 200,
+    "sha256": "677060caca519fdc9f6bd7e3cb267e9a0ba67801036c623b1f5a23b6359445bb"
+  },
+  {
+    "file": "privacy.html",
+    "requested": "https://word-in-web.com/word-plugin/privacy.html",
+    "url": "https://word-in-web.com/word-plugin/privacy",
+    "status": 200,
+    "sha256": "a193816b5978837216765a6ee407cd4771308b75f559757cb43e343168beac08"
+  },
+  {
+    "file": "terms.html",
+    "requested": "https://word-in-web.com/word-plugin/terms.html",
+    "url": "https://word-in-web.com/word-plugin/terms",
+    "status": 200,
+    "sha256": "6267ecbd233ee75b5c65ac44a1bc9f17d2f444be51453fc1cbdafaf4bc3d3a53"
+  },
+  {
+    "file": "site.css",
+    "requested": "https://word-in-web.com/word-plugin/site.css",
+    "url": "https://word-in-web.com/word-plugin/site.css",
+    "status": 200,
+    "sha256": "d5fa4fb8c8b677781535e5af62e5b357010f13c9a4a90910ede8f504caaf2f2a"
+  }
+]

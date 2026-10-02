@@ -1,0 +1,17 @@
+Subject: Local MCP distribution for Word in web in the public plugin directory
+
+We want to publish Word in web in the public ChatGPT/Codex plugin directory. Users should run the plugin on their own devices. The plugin involves no payments.
+
+The package bundles a Node.js stdio MCP server and a Word editor MCP App. Users explicitly select a local DOCX file. The editor displays that file in the desktop panel, and chat tools inspect and edit it through a private editor session. Changes save to the selected file. Local installation requires Node.js 22.18 or later.
+
+We verified the native Codex integration with installed version 0.1.0+codex.20261001053239: local file launch, Chat connected status, document inspection, text insertion through the installed MCP tools, and saving the edit back to the DOCX. We also tested a clean temporary installation of the bundled server and its save conflict detection.
+
+Your plugin documentation directs developers to their OpenAI contact for local MCP support. Please confirm:
+
+1. Can the public plugin directory distribute this bundled local MCP server?
+2. Which package format and submission/review process should we use?
+3. Which ChatGPT/Codex desktop hosts support this distribution route?
+
+We have a review fixture, draft review cases, release metadata, and a screenshot of the successful native integration. We can provide these materials through your requested review channel.
+
+Reference: https://developers.openai.com/plugins/build/plugins#bundled-mcp-servers-and-lifecycle-hooks
