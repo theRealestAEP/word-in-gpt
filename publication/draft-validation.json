@@ -6,9 +6,8 @@
     512,
     512
   ],
-  "status": "Draft; live listing URLs verified; privacy notice remains a draft",
+  "status": "Draft; live listing URLs verified; recording and submission setup remain pending",
   "missing": [
-    "Privacy notice finalization: support-email retention",
     "demo_recording_url",
     "country targeting confirmation",
     "exact verified publisher name confirmation",

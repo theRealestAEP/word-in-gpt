@@ -30,6 +30,8 @@ Country targeting, publisher verification, listing URLs, and demo URL remain pen
 
 ## Demo walkthrough
 
+The prepared recording copy is `../dev/recording-review.docx`. Restart Codex and start a fresh chat before recording. Confirm the editor says **Add to chat**, **Chat connected**, and **Saved**. The last staging check opened the file successfully but still displayed the earlier **Use selection in chat** label; recording awaits loading the updated installed UI.
+
 Use a disposable `review.docx` containing “Quarterly review” and “Revenue increased this quarter.” Show the installed release version and the native desktop host. Start screen recording with prompts and results readable.
 
 1. Open the file and show its name and **Chat connected** status.
@@ -70,3 +72,7 @@ Website build passed. Browser checks confirmed the contact address, navigation, 
 ## Website deployment — October 1, 2026
 
 Deployed the prepared product, support, privacy, and terms pages to the existing `wordinweb-parity` Cloudflare Worker, version `fbc2a66b-b9ad-490d-a9b5-a3030e6b5f64`. The verified production domain is word-in-web.com. All four pages and their stylesheet returned HTTP 200 and matched the prepared source bytes; browser checks confirmed their content and navigation. The public manifest and rebuilt draft ZIP now include the canonical live URLs and draft publisher name Alex Pickett, consistent with the requested personal identity. Inspect the exact verified identity name in the portal. Privacy still visibly carries a support-email-retention draft note. Demo recording, country targeting, and final saved-version portal checks remain pending. Evidence: `website/live-verification.json`, `website/domain-verification.json`, `website/logging-verification.json`, and `website/support-published.png`.
+
+## Privacy finalization and recording stage — October 1, 2026
+
+The publisher confirmed support emails are kept. The privacy page now says they remain in the mailbox until deleted, and its draft label is removed. The revised page was deployed and its live contents verified. A clean recording document was copied to `dev/recording-review.docx` and opened in the native Word panel with Saved and Chat connected. The panel still showed the older selection button label; restart Codex and verify the updated Add to chat UI before rehearsal and recording. No video has been recorded.

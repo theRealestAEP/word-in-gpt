@@ -1,5 +1,5 @@
 {
-  "status": "Published on word-in-web.com; privacy remains a draft",
+  "status": "Published and verified on word-in-web.com",
   "build": "Existing WordInWeb website build passed",
   "pages": [
     "index.html",
@@ -17,9 +17,7 @@
     "Browser navigation and visible content checked"
   ],
   "supportEmail": "alex@cobbery.com",
-  "privacyPending": [
-    "Support-email retention"
-  ],
-  "screenshot": "support-published.png",
-  "deploymentVersion": "fbc2a66b-b9ad-490d-a9b5-a3030e6b5f64"
+  "privacyPending": [],
+  "screenshot": "privacy-published.png",
+  "deploymentVersion": "eed2e0e5-b928-4fe5-b507-55d8fe1069b0"
 }
