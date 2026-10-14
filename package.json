@@ -15,6 +15,8 @@
     "build:worker-assets": "npm run build:app && node dev/prepare-worker-assets.mjs",
     "dev:worker": "wrangler dev",
     "deploy:worker": "wrangler deploy",
+    "errors": "wrangler kv key list --binding ERROR_LOG --remote",
+    "usage": "node --env-file-if-exists=.env dev/usage.mjs",
     "serve": "node src/server/http.ts",
     "demo": "node dev/server.ts",
     "typecheck": "tsc --noEmit",
@@ -26,10 +28,10 @@
     "@fontsource/carlito": "^5.3.0",
     "@modelcontextprotocol/sdk": "^1.31.0",
     "@openai/mcp-extensions": "^0.1.0",
-    "@wordinweb/agent": "^0.2.1",
+    "@wordinweb/agent": "^0.2.5",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "wordinweb": "^0.3.2",
+    "wordinweb": "^0.3.7",
     "zod": "^4.6.5"
   },
   "devDependencies": {

@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "word-in-gpt",
-  "version": "0.1.0",
+  "version": "0.1.4",
   "description": "View and edit .docx files together with chat.",
   "author": {
     "name": "Alex Pickett",
@@ -18,9 +18,9 @@
   "extensions": {
     "com.openai": {
       "interface": {
-        "displayName": "Word",
-        "shortDescription": "View and edit .docx files",
-        "longDescription": "Open Word documents in a page-layout editor. Read, search, and rewrite text with chat while keeping existing styles. Apply formatting, edit tables, and adjust page layout. Highlight a passage and choose Add to chat from the toolbar or the first item in the right-click menu. Review comments alongside the document. Changes save back to the opened file.",
+        "displayName": "Word in Chat",
+        "shortDescription": "View and edit DOCX files",
+        "longDescription": "Open DOCX documents in a page-layout editor. Read, search, and rewrite text with chat while keeping existing styles. Apply formatting, edit tables, and adjust page layout. Highlight text and choose Add to chat. Review comments alongside the document. Download an edited copy of an uploaded attachment. Host-managed files save through the host when writing is permitted.",
         "category": "Productivity",
         "capabilities": [
           "Interactive",
@@ -44,56 +44,73 @@
         "test_cases": {
           "positive": [
             {
-              "description": "Open a document in the native host. Use a disposable .docx named review.docx with two body paragraphs: Quarterly review and Revenue increased this quarter. Start each case from an unchanged copy. Use a copy of fixtures/review.docx. In the desktop host, select the file and open it in Word using the host-granted resource URI. Wait for Chat connected. ",
-              "prompt": "Open review.docx in Word so I can edit it.",
-              "tools_triggered": "open_word_document",
-              "expected_behavior": "The desktop host calls open_word_document with file.name review.docx and its actual host-granted resource URI. The returned file descriptor preserves that URI. The native Word panel displays review.docx and Chat connected. Use the editorSessionId supplied by the editor context for subsequent document calls."
+              "description": "In ChatGPT web and the ChatGPT mobile app, attach an unchanged copy of review.docx from the fixture URL. It contains Quarterly review and Revenue increased this quarter. Open the attachment with Word in Chat and wait for Chat connected. Start each case in a fresh chat with a fresh attachment.",
+              "prompt": "Open review.docx in Word in Chat so I can edit it.",
+              "tools_triggered": "open_word_document, word_document_inspect",
+              "expected_behavior": "Call open_word_document with ChatGPT's file object: download_url and file_id, plus optional file_name and mime_type. The result returns editorSessionId directly; use that ID to call word_document_inspect with kind context and confirm both fixture paragraphs. The editor displays Quarterly review and Revenue increased this quarter., Chat connected, and Download DOCX.",
+              "file_attachment_urls": [
+                "https://word-in-gpt-mcp.callerinfo.workers.dev/review.docx"
+              ]
             },
             {
-              "description": "Read the document without changing it. Use a disposable .docx named review.docx with two body paragraphs: Quarterly review and Revenue increased this quarter. Start each case from an unchanged copy. Use a copy of fixtures/review.docx. In the desktop host, select the file and open it in Word using the host-granted resource URI. Wait for Chat connected. ",
+              "description": "In ChatGPT web and the ChatGPT mobile app, attach an unchanged copy of review.docx from the fixture URL. It contains Quarterly review and Revenue increased this quarter. Open the attachment with Word in Chat and wait for Chat connected. Start each case in a fresh chat with a fresh attachment.",
               "prompt": "Summarize the open document in one sentence.",
               "tools_triggered": "word_document_inspect",
-              "expected_behavior": "Call word_document_inspect with kind context and the session ID for review.docx. Summarize the quarterly review and increased revenue using the returned text. File content stays unchanged."
+              "expected_behavior": "Call word_document_inspect with kind context and the session ID for review.docx. Summarize the quarterly review and increased revenue using the returned text. File content stays unchanged.",
+              "file_attachment_urls": [
+                "https://word-in-gpt-mcp.callerinfo.workers.dev/review.docx"
+              ]
             },
             {
-              "description": "Search a known phrase. Use a disposable .docx named review.docx with two body paragraphs: Quarterly review and Revenue increased this quarter. Start each case from an unchanged copy. Use a copy of fixtures/review.docx. In the desktop host, select the file and open it in Word using the host-granted resource URI. Wait for Chat connected. ",
+              "description": "In ChatGPT web and the ChatGPT mobile app, attach an unchanged copy of review.docx from the fixture URL. It contains Quarterly review and Revenue increased this quarter. Open the attachment with Word in Chat and wait for Chat connected. Start each case in a fresh chat with a fresh attachment.",
               "prompt": "Find every occurrence of Revenue in the open document.",
               "tools_triggered": "word_document_inspect",
-              "expected_behavior": "Call word_document_inspect with kind search, query Revenue, and the current session ID. Report the one matching paragraph using the returned references. File content stays unchanged."
+              "expected_behavior": "Call word_document_inspect with kind search, query Revenue, and the current session ID. Report the one matching paragraph using the returned references. File content stays unchanged.",
+              "file_attachment_urls": [
+                "https://word-in-gpt-mcp.callerinfo.workers.dev/review.docx"
+              ]
             },
             {
-              "description": "Rewrite content while preserving formatting. Use an unchanged copy of fixtures/review.docx, opened in the desktop editor with its host-granted URI. Wait for Chat connected.",
+              "description": "In ChatGPT web and the ChatGPT mobile app, attach an unchanged copy of review.docx from the fixture URL. It contains Quarterly review and Revenue increased this quarter. Open the attachment with Word in Chat and wait for Chat connected. Start each case in a fresh chat with a fresh attachment.",
               "prompt": "Change Revenue increased this quarter. to Revenue grew this quarter. Keep the existing formatting.",
               "tools_triggered": "word_document_project, word_document_patch",
-              "expected_behavior": "Read the body with word_document_project in text mode. Apply a line-range word_document_patch in text mode using the returned revision and window. The body becomes Revenue grew this quarter. The Quarterly review heading, paragraph styles and run formatting remain intact. Confirm Saved status and the persisted text in the reopened DOCX."
+              "expected_behavior": "Read the body with word_document_project in text mode. Apply word_document_patch in text mode using its revision and window. Only the revenue paragraph becomes Revenue grew this quarter. The heading style and paragraph/run formatting remain intact. The tool reports Edited copy ready to download. Choose Download DOCX and reopen the exported file to verify the text and formatting.",
+              "file_attachment_urls": [
+                "https://word-in-gpt-mcp.callerinfo.workers.dev/review.docx"
+              ]
             },
             {
-              "description": "Format a paragraph and preserve its text. Use a disposable .docx named review.docx with two body paragraphs: Quarterly review and Revenue increased this quarter. Start each case from an unchanged copy. Use a copy of fixtures/review.docx. In the desktop host, select the file and open it in Word using the host-granted resource URI. Wait for Chat connected. ",
+              "description": "In ChatGPT web and the ChatGPT mobile app, attach an unchanged copy of review.docx from the fixture URL. It contains Quarterly review and Revenue increased this quarter. Open the attachment with Word in Chat and wait for Chat connected. Start each case in a fresh chat with a fresh attachment.",
               "prompt": "Center the Quarterly review heading.",
-              "tools_triggered": "word_document_inspect, word_document_capabilities, word_document_edit",
-              "expected_behavior": "Inspect the document, obtain the formatParagraph schema, then apply formatParagraph with align center to the observed heading block using the latest revision and session ID. Confirm centered text in the native panel and saved DOCX paragraph alignment. Paragraph text stays intact."
+              "tools_triggered": "word_document_inspect, word_document_format_paragraph",
+              "expected_behavior": "Inspect the document and call word_document_format_paragraph with align center, the heading blockRef, the observed revision, and editorSessionId. Confirm the centered heading in the panel. Download DOCX and reopen it to verify paragraph alignment center, unchanged text, and Heading1 style.",
+              "file_attachment_urls": [
+                "https://word-in-gpt-mcp.callerinfo.workers.dev/review.docx"
+              ]
             }
           ],
           "negative": [
             {
-              "description": "Email delivery is outside the plugin tool set. Explain that sending requires an email service and recipient details. Keep the document unchanged and make no Word tool calls for sending.",
+              "description": "Word in Chat handles document editing and export. Email delivery uses a separate email service or the user's mail app. Ask for the recipient and exported copy when needed. Make no Word tool call for email delivery, keep the document unchanged, and claim delivery only after a separate email service confirms it.",
               "prompt": "Email the open document to my accountant."
             },
             {
-              "description": "The plugin has no purchasing or checkout tool. Explain that a software purchase requires a separate vendor workflow. Make no Word tool calls and claim no purchase.",
+              "description": "Software purchases use the vendor's checkout or a separate purchasing service. Word in Chat makes no purchasing call and leaves the document unchanged. Explain what the user needs to do next and claim a purchase only after a separate service confirms it.",
               "prompt": "Buy a Microsoft 365 subscription for me."
             },
             {
-              "description": "The plugin has no cloud-drive search or account enumeration tool. Explain that a connected Drive service or a selected file is needed. Make no Word tool calls for account discovery.",
+              "description": "Drive account searches use a separate connected Drive service. If that service is available, ChatGPT may use it. Otherwise, explain that a Drive connection or selected file is needed. Word in Chat makes no account-discovery call and leaves the open document unchanged.",
               "prompt": "Find all the Word documents in my Google Drive account."
             }
           ]
         },
         "commerce": false,
-        "commerce_description": "The plugin is available without payments."
+        "commerce_description": "The plugin is available without payments.",
+        "demo_recording_url": "https://drive.google.com/file/d/1HLWpaRN-lxqioIA4pP0TZz3GCgLvlVjE/view?usp=sharing"
       },
       "publication": {
-        "release_notes": "Initial release: view and edit Word documents with chat, use a compact two-call path for wording changes, apply detailed formatting and layout operations, add highlighted text to chat from the first right-click item, review comments, and save changes to the opened file."
+        "release_notes": "Expose each document edit as an individual tool with its description, input schema, and annotations. Give the uploaded-file and host-file openers distinct display names. Keep the compact project-and-patch path for wording edits.",
+        "countries": []
       }
     }
   }

@@ -12,8 +12,21 @@
   "assets": {
     "directory": "./deploy/worker-assets",
     "binding": "ASSETS",
-    "run_worker_first": true
+    // Codex re-checks every MCP server for an OAuth login about every 85 seconds.
+    // These paths go straight to the free asset layer, which answers 404
+    // ("no login needed") without invoking the Worker.
+    "run_worker_first": ["/*", "!/.well-known/oauth-*", "!/.well-known/openid-*", "!/mcp/.well-known/*"]
   },
+  // Per caller IP, per Cloudflare location. Period must be 10 or 60 seconds.
+  "ratelimits": [
+    { "name": "MCP_LIMIT", "namespace_id": "1001", "simple": { "limit": 100, "period": 10 } },
+    { "name": "BROWSER_LIMIT", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } }
+  ],
+  // Caught relay errors, one entry each, kept 30 days. Read them with `npm run errors`.
+  "kv_namespaces": [{ "binding": "ERROR_LOG", "id": "587c2ccbef5243478eb4eb9cc481f076" }],
+  // Unique users: one hashed data point per user per day. Read them with `npm run usage`.
+  // The USAGE_SALT secret is set with `wrangler secret put USAGE_SALT`.
+  "analytics_engine_datasets": [{ "binding": "USAGE", "dataset": "word_in_gpt_usage" }],
   "durable_objects": {
     "bindings": [{ "name": "EDITOR_RELAY", "class_name": "WordEditorRelay" }]
   },

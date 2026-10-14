@@ -3,6 +3,7 @@ import { DocxToolbar, DocxView, useAgentDocumentSession, type AgentDocumentViewB
 import { localDocumentViewBinding } from "@wordinweb/agent";
 import type { EditorController, OpenDocument } from "./controller.ts";
 import type { PresencePosition, SelectionRange } from "./selection.ts";
+import { enableTouchSelection } from "./touch-selection.ts";
 
 export function App({ controller }: { controller: EditorController }) {
   const { file, doc, status, conflict, connection } = useSyncExternalStore(controller.subscribe, controller.getState);
@@ -10,6 +11,14 @@ export function App({ controller }: { controller: EditorController }) {
   const [selection, setSelection] = useState<SelectionRange[]>([]);
   const selectionRef = useRef<SelectionRange[]>([]);
   const [selectionStatus, setSelectionStatus] = useState("");
+  const [selecting, setSelecting] = useState(false);
+  useEffect(() => {
+    setSelecting(false);
+  }, [doc]);
+  useEffect(() => {
+    if (!selecting || !api) return;
+    return enableTouchSelection(document.querySelector<HTMLElement>(".document")!);
+  }, [selecting, api]);
   useEffect(() => { setApi(null); setSelection([]); selectionRef.current = []; setSelectionStatus(""); }, [doc]);
   const onSelection = useMemo(() => (position: PresencePosition | null) => {
     selectionRef.current = position?.ranges ?? [];
@@ -62,13 +71,20 @@ export function App({ controller }: { controller: EditorController }) {
       }
     }}>
       <div className="status-bar" role="status">
-        <span className="file-name">{file?.name ?? "Word"}</span>
-        <button className="share-selection" disabled={!selection.length || connection !== "Chat connected"}
-          onMouseDown={event => event.preventDefault()} onClick={() => shareSelection(selection)}>Add to chat</button>
+        <span className="file-name">{file?.name ?? "Word in Chat"}</span>
+        <div className="document-actions">
+          {doc && <button className="touch-select" aria-pressed={selecting}
+            title="Drag to select text. Tap again to scroll."
+            onMouseDown={event => event.preventDefault()} onClick={() => setSelecting(!selecting)}>
+            {selecting ? "Selection on" : "Select text"}</button>}
+          <button className="share-selection" disabled={!selection.length || connection !== "Chat connected"}
+            onMouseDown={event => event.preventDefault()} onClick={() => shareSelection(selection)}>Add to chat</button>
+          {doc && <button className="download-docx" onClick={() => controller.download().catch(controller.report)}>Download DOCX</button>}
+        </div>
         <div className="document-status">
-          <span className="save-status">{status}</span>
-          <span>{connection}</span>
-          {selectionStatus && <span>{selectionStatus}</span>}
+          <span className="save-status" title={selectionStatus || status}>
+            {selectionStatus || (selecting ? "Drag across text · tap Selection on to scroll" : status)}</span>
+          <span className="connection-status" title={connection}>{connection}</span>
         </div>
         {conflict && (
           <span className="conflict">
@@ -80,7 +96,7 @@ export function App({ controller }: { controller: EditorController }) {
       </div>
       {api && <DocxToolbar api={api} mode="advanced" className="word-toolbar" />}
       {doc ? (
-        <DocumentView key={doc.id} doc={doc} onEdit={controller.noteEdit} onReady={setApi} onError={controller.report} onSelection={onSelection} />
+        <DocumentView key={doc.id} doc={doc} selecting={selecting} onEdit={controller.noteEdit} onReady={setApi} onError={controller.report} onSelection={onSelection} />
       ) : (
         <p className="empty">Open a .docx file in ChatGPT or Codex to view and edit it here.</p>
       )}
@@ -88,8 +104,9 @@ export function App({ controller }: { controller: EditorController }) {
   );
 }
 
-function DocumentView({ doc, onEdit, onReady, onError, onSelection }: {
+function DocumentView({ doc, selecting, onEdit, onReady, onError, onSelection }: {
   doc: OpenDocument;
+  selecting: boolean;
   onEdit: () => void;
   onReady: (api: DocxViewApi) => void;
   onError: (error: Error) => void;
@@ -115,5 +132,5 @@ function DocumentView({ doc, onEdit, onReady, onError, onSelection }: {
   // The classes are the same code, but TypeScript treats their private fields as different types.
   const view = useAgentDocumentSession(binding as unknown as AgentDocumentViewBinding);
   return <DocxView {...view} collab={{ ...view.collab!, setPresence: onSelection }} editable commentAuthor="You"
-    narrowWidth={1100} onReady={onReady} onError={onError} className="document" />;
+    narrowWidth={1100} onReady={onReady} onError={onError} className={`document${selecting ? " touch-selecting" : ""}`} />;
 }

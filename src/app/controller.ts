@@ -1,5 +1,5 @@
 import { AgentDocument, LocalDocumentSession } from "@wordinweb/agent";
-import { host, readFile, writeFile, type FileSnapshot, type HostFile } from "./host.ts";
+import { host, readFile, writeFile, downloadDocx, isUploadedFile, type FileSnapshot, type HostFile } from "./host.ts";
 import { liveToolHandler, type LiveToolCall } from "./live-tools.ts";
 import { selectionContext, type SelectionRange } from "./selection.ts";
 
@@ -52,7 +52,10 @@ export class EditorController {
   setConnection = (connection: string): void => { this.set({ connection }); };
 
   async connectChat(editorSessionId: string): Promise<void> {
-    this.editorContext = `Word editor: ${this.state.file?.name}. Use the word_document_* MCP tools with editorSessionId ${editorSessionId}. Commands operate on this open document and changes autosave through the host.`;
+    const save = isUploadedFile(this.state.file!.resourceUri)
+      ? "This is an uploaded copy. Changes stay in this editor; Download DOCX exports an edited copy."
+      : "Changes autosave through the host.";
+    this.editorContext = `Word editor: ${this.state.file?.name}. Use the word_document_* MCP tools with editorSessionId ${editorSessionId}. Commands operate on this open document. ${save}`;
     await this.updateModelContext();
     this.setConnection("Chat connected");
   }
@@ -73,15 +76,25 @@ export class EditorController {
   };
 
   async open(file: HostFile): Promise<void> {
-    if (this.state.file?.resourceUri === file.resourceUri) return;
-    this.set({ file, status: "Loading" });
-    if (!file.resourceUri.startsWith("word-local://")) await host.request("resources/subscribe", { uri: file.resourceUri });
-    this.show(await readFile(file.resourceUri));
+    if (this.state.doc && this.state.file?.resourceUri === file.resourceUri) return;
+    this.set({ file, doc: null, status: "Loading", connection: "Loading document…" });
+    try {
+      if (!file.resourceUri.startsWith("word-local://") && !isUploadedFile(file.resourceUri)) await host.request("resources/subscribe", { uri: file.resourceUri });
+      this.show(await readFile(file.resourceUri));
+    } catch (error) {
+      this.setConnection("Document unavailable");
+      throw error;
+    }
   }
 
   async callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
     if (!this.state.doc) throw new Error("No document is open. Ask the user to open a .docx file.");
     return this.state.doc.callTool(name, args);
+  }
+
+  async download(): Promise<void> {
+    await this.flush();
+    await downloadDocx(this.state.file!, this.state.doc!.session.doc.save());
   }
 
   /** Counts a user or model edit and schedules a save. */
@@ -134,7 +147,7 @@ export class EditorController {
     this.set({
       doc: { id: this.nextId++, session, callTool: liveToolHandler(agent) },
       conflict: false,
-      status: snapshot.writable ? "Saved" : "Read-only: edits stay in this view",
+      status: isUploadedFile(this.state.file!.resourceUri) ? "Uploaded copy · download to keep edits" : snapshot.writable ? "Saved" : "Read-only: edits stay in this view",
     });
   }
 
@@ -152,7 +165,7 @@ export class EditorController {
     if (result.outcome === "saved") {
       this.etag = result.etag;
       this.savedEdits = edits;
-      this.set({ status: this.edits === this.savedEdits ? "Saved" : "Unsaved changes" });
+      this.set({ status: this.edits === this.savedEdits ? (isUploadedFile(file.resourceUri) ? "Edited copy ready to download" : "Saved") : "Unsaved changes" });
     } else if (result.outcome === "conflict") {
       this.set({ conflict: true, status: "The file changed on disk" });
     } else {

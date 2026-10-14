@@ -16,3 +16,6 @@ dev/*.jpg
 !dev/selection-toolbar-fixed.jpg
 publication/upload-draft/
 publication/website/deploy-staging.json
+.DS_Store
+publication/individual-identity-support.txt
+publication/word-in-gpt 2/

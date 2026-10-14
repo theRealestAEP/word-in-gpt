@@ -1,28 +1,87 @@
 {
   "archive": "/Users/alexpickett/Desktop/Projects/word-in-gpt/publication/submission-draft.zip",
-  "fileCount": 10,
-  "bytes": 46790,
+  "fileCount": 9,
+  "bytes": 40845,
   "pngDimensions": [
     512,
     512
   ],
-  "status": "Draft; live listing URLs verified; recording and submission setup remain pending",
+  "status": "Test candidate: phone reopening and summary confirmed. Editor-v14 deployed with wider touch drag targets and touch-release positioning; other physical mobile review cases pending.",
   "missing": [
-    "demo_recording_url",
-    "country targeting confirmation",
-    "exact verified publisher name confirmation",
-    "saved public-version review cases and portal checks"
+    "complete plugin skill activation and reconnection verification in ChatGPT",
+    "real ChatGPT mobile verification of all submitted cases",
+    "saved-version portal checks",
+    "demo of the new attachment/export path"
   ],
   "inventory": [
+    "word-in-gpt/plugin.json",
+    "word-in-gpt/mcp.json",
     "word-in-gpt/assets/icon.png",
     "word-in-gpt/fixtures/review.docx",
-    "word-in-gpt/mcp.json",
-    "word-in-gpt/plugin.json",
     "word-in-gpt/skills/word-editor/SKILL.md",
     "word-in-gpt/skills/wordinweb-documents/SKILL.md",
     "word-in-gpt/skills/wordinweb-documents/agents/openai.yaml",
-    "word-in-gpt/skills/wordinweb-documents/references/create.md",
     "word-in-gpt/skills/wordinweb-documents/references/inspect-edit.md",
     "word-in-gpt/skills/wordinweb-documents/references/interface.md"
-  ]
+  ],
+  "demo": {
+    "url": "https://drive.google.com/file/d/1HLWpaRN-lxqioIA4pP0TZz3GCgLvlVjE/view?usp=sharing",
+    "fileName": "demo.mp4",
+    "durationSeconds": 84,
+    "anonymousPlayback": "verified in in-app browser on 2026-10-02"
+  },
+  "countryTargeting": "All countries supported by the directory; publisher confirmed 2026-10-02",
+  "displayName": "Word in Chat",
+  "schemaValidation": "Agent Plugins manifest and MCP schemas passed for version 0.1.2",
+  "portalStatus": "October 7: version 0.1.1 Changes required, skills Checks passed, Developer Alex Pickett. Rejection provides no failed case or transcript. No replacement upload or resubmission made.",
+  "hostedBranding": {
+    "mcpWorkerVersion": "d4fcea13-d6c0-4142-9406-e97ba0154ce2",
+    "websiteWorkerVersion": "50424144-1139-405b-9e5d-1e87d7527fd4",
+    "verification": "Live editor, standard upload tool, synthetic fixture, and website pages verified"
+  },
+  "version": "0.1.2",
+  "skillScope": "Editing the DOCX open in Word in Chat. Invitation, offline, headless creation, and collaboration workflows removed.",
+  "publisher": "Alex Pickett",
+  "automatedChecks": {
+    "tests": 18,
+    "typecheck": "passed",
+    "build": "passed",
+    "isolatedLocalPlugin": "passed",
+    "liveHttpRouting": "passed",
+    "uploadedFixtureBytes": "exact match",
+    "modelFacingFileBytes": "absent",
+    "previousTemplateUris": "Live reads of editor-v5, v6, v7, and v8 return identical current HTML with the requested URI.",
+    "pollTimeoutReconnect": "passed: timeouts and expired sessions resume with the reference already held by the model; expired commands stay discarded",
+    "attachmentReopening": "passed: persisted tool metadata, authorized file API fallback, and retry after late file bytes; live opener rejects a temporary word-upload handle sent to the desktop opener",
+    "sharedOpeningSession": "passed: queued model inspection uses the ID returned by the opener, and the editor joins that exact session; verified through live cross-client HTTP routing",
+    "currentTemplate": "passed: live editor-v14 HTML exactly matches plugin/dist/app.html"
+  },
+  "browserChecks": {
+    "hostCapabilities": {},
+    "readSearchRewriteCenterExport": "passed",
+    "responsiveViewport": [
+      390,
+      844
+    ],
+    "actualMobile": "October 7 iPhone Safari screenshot and user report: opener successfully reopened review.docx and ChatGPT correctly summarized both paragraphs. Physical touch dragging still selected only a word. Mobile editing, export, reconnection, and selection sharing cases remain pending.",
+    "fileSwitch": "passed: new file has its own session; previous session closed",
+    "forcedReconnect": "passed: edited text and centered formatting retained",
+    "hostedRelay": "passed: the actual deployed Cloudflare endpoint, through the localhost host proxy, retained edited text and centered formatting after a forced disconnect and separated the next file session",
+    "stableMobileToolbar": "375px iframe in 390x844 browser: status height107px, action buttons y29px before and after real edits, forced reconnection, and file switch. Read/search/rewrite/center/reconnect/file-switch suite passed locally. Preview is responsive testing, separate from real iPhone Safari.",
+    "attachmentReload": "passed: phone-sized local host removes private fileBlob, supplies the authorized file API, and fully reloads. Correct fixture opens; read/search/rewrite/center/reconnect/file-switch suite passes afterwards.",
+    "missingModelContext": "passed through Cloudflare: read, search, rewrite, center, reopen, and forced reconnect while context forwarding is omitted. Reconnection retains the same session ID and edited copy.",
+    "touchSelection": "Editor-v14 phone-width synthetic touch regression passed: starts on page whitespace beside the caret; release-only forward drag selects a full sentence; reverse drag spans both paragraphs; Add to chat preserves exact text and run references. Physical iPhone gesture remains pending."
+  },
+  "chatgptWeb": {
+    "connection": "private custom MCP connection to the deployed endpoint",
+    "positiveCases": "Expected results in two fresh-document runs; second run exposed a closed connection. Final deployed reconnect build under verification.",
+    "download": "Two actual downloads inspected: correct text, centered Heading1, unchanged run formatting.",
+    "emailBoundary": "recipient/export requested; no email sent",
+    "purchaseBoundary": "separate purchasing workflow needed; no purchase claimed",
+    "driveBoundary": "separate Google Drive plugin used; no Word discovery tool",
+    "reconnect": "A forced disconnect through the existing custom connection still showed a closed session. Current server resource exactly matches the new build; a fresh complete-ZIP import was started, then Chrome switched to an email tab. Import/reconnect verification is pending.",
+    "metadataRefresh": "Refresh tools completed after editor-v14 exact live-build verification; button re-enabled without a visible error. Physical phone gesture validation pending."
+  },
+  "publicZipSkills": "Complete ZIP imported privately as Plugin_8143d5ddefcc81919ba051c1c780ec20. Page confirms version 0.1.2, one MCP and two skills. OpenAI marks imports declaring MCP servers Desktop only; user confirmed on phone. Skill activation and reconnect remain unverified.",
+  "sha256": "f9c544c3cec609c4d9597fa5f3bd1f30506b55da3c085ecc66cc37788d2d69e3"
 }

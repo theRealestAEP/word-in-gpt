@@ -9,17 +9,16 @@
 - [Patching a projection](#patching-a-projection)
 - [References](#references)
 - [Editing](#editing)
-- [Compose generic primitives](#compose-generic-primitives)
+- [Combine edit operations](#combine-edit-operations)
 - [Complete operation catalog](#complete-operation-catalog)
 - [Nested value shapes](#nested-value-shapes)
-- [JavaScript API](#javascript-api)
-- [Session modes](#session-modes)
 
 ## Execution surfaces
 
-Use the `word_document_*` tools when the host exposes them. Use `AgentDocument` when JavaScript access is available. Both surfaces use the same document state, references, schemas, and revisions.
-
-The host supplies either a blank DOCX, an existing DOCX, a local browser session, or a collaborative session.
+Use the `word_document_*` tools exposed by Word in Chat against the open
+DOCX. Include the editor's current `editorSessionId` in every call. The editor
+saves host-managed files automatically. Uploaded attachments remain edited
+copies in the panel; choose Download DOCX to keep the result.
 
 ## Tool contracts
 
@@ -35,95 +34,6 @@ Return edit descriptions and closed JSON Schemas.
 ```
 
 Omit both fields to retrieve the complete catalog. Prefer `kind` for the smallest response.
-
-### `word_document_compose`
-
-Create the complete structure of a new `AgentDocument.create()` document in one atomic request.
-
-```ts
-{
-  revision: string;
-  page?: PageLayoutPatch;
-  body: AgentComposeBlock[];
-  header?: AgentComposeBlock[];
-  footer?: AgentComposeBlock[];
-  firstHeader?: AgentComposeBlock[];
-  firstFooter?: AgentComposeBlock[];
-}
-```
-
-Composition accepts 1–500 body blocks and up to 100 header or footer blocks.
-It validates the complete closed schema before it changes the document. Register
-image assets first, then use their `assetRef` values in image blocks.
-
-```ts
-type AgentComposeBlock =
-  | { type: "paragraph"; text?: string; runs?: AgentComposeRun[]; styleId?: "Normal" | "Title" | "Subtitle" | "Heading1" | "Heading2" | "Heading3"; align?: "left" | "center" | "right" | "both"; spacing?: { beforePt?: number; afterPt?: number; lineMultiple?: number }; list?: "bullet" | "number" }
-  | { type: "heading"; level: 1 | 2 | 3; text: string }
-  | { type: "table"; rows: Array<Array<string | AgentComposeCell>>; headerRows?: number; headerFill?: string; headerTextColor?: string; columnWidths?: number[] /* pixels */ }
-  | { type: "equation"; mathText: string; align?: "left" | "center" | "right" }
-  | { type: "chart"; chart: ChartData; widthPx?: number; heightPx?: number; align?: "left" | "center" | "right" }
-  | { type: "smartArt"; smartArt: SmartArtData; widthPx?: number; heightPx?: number; align?: "left" | "center" | "right" }
-  | { type: "image"; assetRef: string; widthPx: number; heightPx: number; alt?: string; align?: "left" | "center" | "right"; wrap?: "inline" | "square" | "topAndBottom" | "none" | "behind"; position?: { xPx: number; yPx: number } }
-  | { type: "shape"; preset: "line" | "verticalLine" | "rectangle" | "roundedRectangle" | "ellipse" | "diamond" | "textBox" | string; text?: string; textStyle?: AgentComposeTextStyle; widthPx?: number; heightPx?: number; position?: { xPx: number; yPx: number }; fill?: string | null; line?: { color: string; widthPx: number; dash: "solid" | "dashed" | "dotted" } | null; wrap?: "inline" | "square" | "topAndBottom" | "none" | "behind"; order?: "front" | "back" }
-  | { type: "wordArt"; text: string; preset: "plain" | "archUp" | "archDown" | "wave" | "chevron" | "circle" | "button" | "chevronDown"; widthPx?: number; heightPx?: number; position?: { xPx: number; yPx: number }; rotation?: number; fill?: string; opacity?: number; wrap?: "inline" | "square" | "topAndBottom" | "none" | "behind"; order?: "front" | "back" }
-  | { type: "pageNumber"; fieldKind: "page" | "pageOfTotal"; align?: "left" | "center" | "right"; color?: string; fontSizePt?: number; fontFamily?: string; bold?: boolean }
-  | { type: "pageBreak" };
-
-interface AgentComposeRun {
-  text: string;
-  bold?: boolean;
-  italic?: boolean;
-  underline?: boolean;
-  color?: string;
-  highlight?: string;
-  fontSizePt?: number;
-  fontFamily?: string;
-}
-
-interface AgentComposeCell {
-  text?: string;
-  runs?: AgentComposeRun[];
-  fill?: string;
-  align?: "left" | "center" | "right";
-  verticalAlign?: "top" | "center" | "bottom";
-}
-
-interface AgentComposeTextStyle {
-  bold?: boolean;
-  italic?: boolean;
-  underline?: boolean;
-  color?: string;
-  fontSizePt?: number;
-  fontFamily?: string;
-  align?: "left" | "center" | "right";
-}
-```
-
-Use `heading` blocks for a native outline. Set both dimensions when a chart or
-SmartArt block needs a custom size. Use `align` for inline visual components.
-Use `wordArt` in the header with `wrap: "behind"` and a low `opacity` for a
-faint repeating watermark. Use a page-sized `shape` with `wrap: "behind"` for
-a positioned background panel. Floating positions use page coordinates. A
-Letter-page panel uses `816` by `1056` pixels at `{ xPx: 0, yPx: 0 }`. Set
-`line: null` for a borderless shape. Use `textStyle` for shape text. Use
-`firstHeader` or `firstFooter` when a cover needs different page furniture.
-
-The result contains the new revision, counts, a complete `overview`, up to 100
-compact `createdObjects`, and `createdObjectsTruncated`. Use these summaries
-before another overview or story read.
-
-```ts
-interface AgentComposeResult {
-  revision: string;
-  status: "applied";
-  blocks: number;
-  components: number;
-  overview: AgentOverview;
-  createdObjects: Array<{ ref: string; editRef?: string; type: string; label?: string }>;
-  createdObjectsTruncated: boolean;
-}
-```
 
 ### `word_document_inspect`
 
@@ -147,7 +57,7 @@ just inserted or resized can be checked instead of guessed at:
 ```json
 {
   "revision": "17",
-  "layout": { "quality": "approximate", "profile": "headless-approx" },
+  "layout": { "quality": "approximate" },
   "totalPages": 3,
   "pages": [{ "page": 1, "contentBottomPx": 812.4, "pageBottomPx": 960 }],
   "drawings": [
@@ -180,20 +90,29 @@ Limits:
 - `spatial.pages.count`: 1–100
 - `fit.pages.count`: 1–100
 
-### `word_document_edit`
+### Individual edit tools
 
-Apply one transaction against an inspected revision.
+Each edit has a separate tool with its description, closed input schema, and
+write annotations. Convert an operation kind to snake case after
+`word_document_`: `formatParagraph` becomes `word_document_format_paragraph`.
+Include `revision`, `editorSessionId`, and the operation's fields. Call
+`word_document_insert_text` as follows:
 
 ```json
 {
   "revision": "17",
-  "operations": [
-    { "kind": "insertText", "at": { "blockRef": "block:1", "runRef": "run:2", "offset": 0 }, "text": "Quarterly report" }
-  ]
+  "editorSessionId": "the ID returned by the opening tool",
+  "at": { "blockRef": "block:1", "runRef": "run:2", "offset": 0 },
+  "text": "Quarterly report"
 }
 ```
 
-A transaction accepts 1–100 operations. The tool schema contains the closed schema for every operation and nested value. Runtime validation applies the same contract before mutation.
+Table cell operations use separate `word_document_table_*` tools:
+`delete_row`, `delete_col`, `delete_table`, `row_above`, `row_below`, `col_left`,
+`col_right`, `merge_right`, `merge_down`, `split_cell`, `cell_shading`,
+`cell_v_align`, and `text_wrapping`. Include `cellRef` and the relevant value
+fields (`fill`, `v`, or `wrapping`, `xPx`, `yPx`). Each call applies one edit
+against the observed revision. Use its returned revision for subsequent calls.
 
 ### `word_document_project`
 
@@ -208,7 +127,7 @@ Render one story as deterministic text plus a line anchor map. Read-only.
 
 Limits:
 
-- `mode`: `text`, `md`, or `outline`. Default `md`.
+- `mode`: `text`, `md`, or `outline`. Default `text` in Word in Chat.
 - `story`: a story ID from `overview`. Default `body`.
 - `maxBlocks`: 1–2,000 top-level blocks per window
 - `maxCharacters`: 1–200,000 per window
@@ -244,26 +163,6 @@ operations.
 The result contains the new `revision`, the applied operation kinds, and the
 refreshed `projection` of the same window, so a second call to re-anchor is
 unnecessary. See [Patching a projection](#patching-a-projection).
-
-### `word_document_asset`
-
-Read a document asset returned by object inspection.
-
-```json
-{ "ref": "asset:1" }
-```
-
-The result contains `ref`, `mediaType`, and base64 bytes.
-
-### `word_document_save`
-
-Serialize the current document.
-
-```json
-{}
-```
-
-The result contains DOCX `mediaType` and base64 bytes.
 
 ## Inspection types
 
@@ -470,7 +369,7 @@ interface AgentSpatialResult {
 }
 ```
 
-Browser layout uses canvas metrics. Headless layout uses deterministic approximate text metrics. The same polygon intersection computes overlaps in both modes.
+Use the reported layout quality when checking positions and overlaps.
 
 ## Text projection
 
@@ -668,14 +567,11 @@ Agent operations replace canonical internal IDs with these fields:
 - `cellRef`: a paragraph inside a table cell
 - `afterBlockRef`: a paragraph insertion target
 - `at`: `{ blockRef, runRef, offset }`
-- `assetRef`: an asset registered with `AgentDocument.addAsset` or supplied by the host
+- `assetRef`: an existing asset reference supplied by the host
 
 Internal IDs, client sequence values, node IDs, and provenance fields are allocated by the interface.
 
-## Compose generic primitives
-
-Use `word_document_compose` for new document structure. Use the combinations
-below for later revisions and for loaded documents.
+## Combine edit operations
 
 Use these combinations when one operation creates a target for later operations.
 
@@ -690,13 +586,14 @@ Use these combinations when one operation creates a target for later operations.
 | Edit an existing positioned object | Inspect its component and use `editRef`. Drawing operations apply through the object reference. |
 | Edit Word-authored legacy rules | VML `v:line` objects inspect as `anchored-line`. Use the same drawing operations and `editRef` as a newly inserted line. |
 | Change chart values | Insert a chart or inspect an existing chart, then use `setChartData` through its `editRef`. |
-| Add binary media | Register bytes through `AgentDocument.addAsset` or a host asset facility, then pass the returned `assetRef` to `insertImage`. |
+| Add binary media | Use an existing host-supplied `assetRef` with `insertImage`. |
 
 One header or footer XML story can produce several spatial occurrences. Spatial inspection returns one occurrence per rendered page with the same `editRef`.
 
 ## Complete operation catalog
 
-The `word_document_capabilities` result is the authoritative closed schema. The tables below document every available operation and its agent-facing fields. Optional fields appear after `optional:`.
+Each individual tool's schema is authoritative. The tables below document the
+operation kinds and their fields. Optional fields appear after `optional:`.
 
 ### Text
 
@@ -1219,7 +1116,7 @@ A tracked formatting change reads as the NEW formatting everywhere, which is wha
 
 A column width lives in three places at once — the grid, the table's total width, and a width on every cell — so a tracked width change writes a record for each. Accepting or rejecting the table's record carries the grid record with it, because `w:tblGridChange` carries no author of its own.
 
-`tableOp` is only partly suggestible. Cell shading, cell vertical alignment and table text wrapping change PROPERTIES and are tracked. Every row and column insert and delete, the whole-table delete, and cell merge and split are STRUCTURAL, have no tracked form here, and are refused in suggestion mode — ask the inviter for editing mode instead. `sortTableRows`, `convertTextToTable` and `convertTableToText` are structural in the same way and equally refused.
+`tableOp` is only partly suggestible. Cell shading, cell vertical alignment and table text wrapping change PROPERTIES and are tracked. Every row and column insert and delete, the whole-table delete, and cell merge and split are STRUCTURAL, have no tracked form here, and are refused in suggestion mode — use direct editing when the user requests the change. `sortTableRows`, `convertTextToTable` and `convertTableToText` are structural in the same way and equally refused.
 
 ### Fields
 
@@ -1228,32 +1125,3 @@ A column width lives in three places at once — the grid, the table's total wid
 `PAGE`, `NUMPAGES`, `SECTIONPAGES`, `SECTION`, `DATE`, `TIME`, `CREATEDATE`, `SAVEDATE`, `PRINTDATE`, `AUTHOR`, `TITLE`, `SUBJECT`, `KEYWORDS`, `COMMENTS`, `FILENAME`, `NUMWORDS`, `NUMCHARS`, `PAGEREF`, `REF`, `SEQ`, `STYLEREF`, `TOC`, `INDEX`, `LISTNUM`, `QUOTE`, `MERGEFIELD`, and `CITATION`.
 
 A `MERGEFIELD` with no attached data source displays its `«Name»` placeholder — prefer `insertMergeField`, which writes the placeholder for you. A `CITATION` must name a source tag in the document's bibliography sources part — prefer `insertCitation`, which resolves the display text ("(Author, Year)" in the document's citation style) and is a clean no-op for an unknown tag.
-
-## JavaScript API
-
-```ts
-import { AgentDocument } from "@wordinweb/agent";
-
-const document = AgentDocument.create({ provenance: { author: "Document agent" } });
-const loaded = AgentDocument.load(docxBytes, { provenance: { author: "Document agent" } });
-const connected = AgentDocument.connect(collaborativeTarget, { provenance: { author: "Document agent" } });
-
-document.inspect(request);
-document.capabilities(category?, kind?);
-document.addAsset(bytes, mediaType);
-document.asset(ref);
-await document.compose({ revision: document.revision, body, header, footer, firstHeader, firstFooter, page });
-await document.edit({ revision: document.revision, operations });
-document.save();
-document.tools();
-```
-
-`addAsset` returns an `asset:*` reference for `insertImage`. `tools()` returns the portable tool definitions described above.
-
-## Session modes
-
-- `AgentDocument.create` or `load`: headless local document
-- `LocalDocumentSession`: one canonical document shared by a solo browser editor and an agent
-- `collaborativeAgentTarget`: adapter for live, reconnecting, and durable offline collaboration sessions
-
-The edit and inspection contracts stay the same in every mode.

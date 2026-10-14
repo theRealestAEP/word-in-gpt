@@ -9,7 +9,9 @@ type Pending = {
 type Session = {
   pending?: Pending;
   wake?: () => void;
-  expiry: ReturnType<typeof setTimeout>;
+  expiry?: ReturnType<typeof setTimeout>;
+  send?: (command: EditorCommand) => void;
+  close?: () => void;
 };
 
 const failure = (text: string): CallToolResult => ({ isError: true, content: [{ type: "text", text }] });
@@ -20,8 +22,10 @@ export class EditorSessions {
   private readonly sessions = new Map<string, Session>();
 
   connect(existingId?: string): string {
-    if (existingId) { this.get(existingId); return existingId; }
-    const id = crypto.randomUUID();
+    if (existingId && this.sessions.has(existingId)) return existingId;
+    // The open editor keeps its capability when a mobile browser resumes.
+    // Expired commands were discarded when the old session closed.
+    const id = existingId ?? crypto.randomUUID();
     this.sessions.set(id, { expiry: this.expireLater(id) });
     return id;
   }
@@ -38,8 +42,26 @@ export class EditorSessions {
     return session;
   }
 
+  has(id: string): boolean { return this.sessions.has(id); }
+
+  attach(id: string, send: (command: EditorCommand) => void, close: () => void): void {
+    const session = this.get(id);
+    clearTimeout(session.expiry);
+    session.expiry = undefined;
+    session.send = send;
+    session.close = close;
+    this.deliver(session);
+  }
+
+  private deliver(session: Session): void {
+    if (!session.send || !session.pending || session.pending.delivered) return;
+    session.pending.delivered = true;
+    session.send(session.pending.command);
+  }
+
   async poll(id: string): Promise<EditorCommand | null> {
     const session = this.get(id);
+    if (session.send) throw new Error("This editor uses WebSocket commands.");
     if (session.wake) throw new Error("The editor already has a pending poll.");
     clearTimeout(session.expiry);
     session.expiry = this.expireLater(id);
@@ -73,6 +95,7 @@ export class EditorSessions {
           resolve(result);
         },
       };
+      this.deliver(session);
       session.wake?.();
     });
   }
@@ -92,6 +115,7 @@ export class EditorSessions {
     session.pending?.finish(failure("The editor disconnected before returning a result. An edit may have completed; inspect the document before retrying."));
     session.wake?.();
     this.sessions.delete(id);
+    session.close?.();
   }
 }
 

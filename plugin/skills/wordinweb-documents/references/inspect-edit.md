@@ -1,7 +1,7 @@
 # Inspect and edit a DOCX
 
-Use this reference for a loaded document, a solo browser session, or a
-collaborative session. The complete type catalog remains in
+Use this reference for the DOCX open in Word in Chat. Include its
+`editorSessionId` in every document tool call. The operation catalog is in
 [interface.md](interface.md).
 
 ## Progressive inspection
@@ -45,8 +45,7 @@ and an optional `label`. Expand an object when its summary lacks a required
 fact. WordArt details include its text, fill, opacity, story, and geometry.
 
 Use cursors for large stories. Reuse only a cursor from the same revision.
-Headless spatial inspection reports deterministic approximate metrics.
-Browser spatial inspection reports canvas-based exact metrics.
+Use the layout quality reported by spatial inspection when checking page geometry.
 
 ## Bulk text work
 
@@ -55,20 +54,20 @@ For a task that is mostly "change this prose", project the story as text with
 `word_document_patch`:
 
 ```json
-{ "mode": "md" }
+{ "mode": "text" }
 ```
 
 ```json
 {
   "revision": "17",
-  "mode": "md",
+  "mode": "text",
   "edits": [{ "startLine": 4, "endLine": 4, "newText": "Adopt the managed platform." }]
 }
 ```
 
 One projection window plus one patch replaces dozens of structured calls for
 rewrites, insertions, paragraph splits, and merges. Keep the structured
-operations for formatting, tables, drawings, equations, review data, and page
+operations for formatting, tables, drawings, equations, comments, and page
 layout.
 
 The projection contract, the atom placeholders, and the patch rules are in
@@ -88,49 +87,25 @@ edit. Re-inspect after a structural edit creates or removes references.
 
 ## Edit workflow
 
-1. Query the exact operation schema.
+1. Choose the individual edit tool and read its input schema.
 2. Copy the inspected revision into the edit request.
-3. Apply up to 100 related operations as one transaction.
+3. Apply the edit through that tool. Use the returned revision for a subsequent edit.
 4. Re-inspect the affected content and page range.
-5. Save after the checks pass.
-6. Render and inspect every page when the host supplies a DOCX renderer.
+5. Check the result in the editor. Confirm Saved for a host-managed file, or Edited copy ready to download for an uploaded attachment. Reopen the exported copy to verify its contents.
 
-Query one operation:
-
-```json
-{ "kind": "setDrawingLineStyle" }
-```
-
-Apply one transaction:
+Call `word_document_insert_text`:
 
 ```json
 {
   "revision": "17",
-  "operations": [
-    {
-      "kind": "insertText",
-      "at": { "blockRef": "block:1", "runRef": "run:2", "offset": 0 },
-      "text": "Quarterly report"
-    }
-  ]
+  "editorSessionId": "the ID returned by the opening tool",
+  "at": { "blockRef": "block:1", "runRef": "run:2", "offset": 0 },
+  "text": "Quarterly report"
 }
 ```
 
-The capability result supplies the closed JSON Schema. Query by exact `kind`
-to keep the response small. The runtime allocates internal IDs, collaboration
-sequence data, and review provenance.
+The tool list supplies each closed JSON Schema upfront. The runtime allocates
+internal IDs and comment or tracked-change provenance.
 
-For a borderless drawing, call `setDrawingLineStyle` with `color: null`.
+For a borderless drawing, call `word_document_set_drawing_line_style` with `color: null`.
 Supply `widthPx` and `dash` when `color` contains an RGB value.
-
-## Session behavior
-
-The inspection and edit contracts stay constant across these modes:
-
-- `AgentDocument.load`: headless local document.
-- `LocalDocumentSession`: solo browser editor and agent share one document.
-- `collaborativeAgentTarget`: live, reconnecting, and durable offline session.
-
-A local transaction validates on a clone before commit. A collaborative
-transaction validates against a clone, then submits canonical operations to
-the existing room session.

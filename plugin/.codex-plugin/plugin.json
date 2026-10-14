@@ -1,6 +1,6 @@
 {
   "name": "word-in-gpt",
-  "version": "0.1.0+codex.20261002170530",
+  "version": "0.1.4+codex.20261008",
   "description": "View and edit Word .docx files with Word-level fidelity, together with the model.",
   "author": {
     "name": "Alex Pickett",
@@ -18,9 +18,9 @@
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
-    "displayName": "Word",
-    "shortDescription": "View and edit .docx files",
-    "longDescription": "Open any .docx file in a high-fidelity Word editor. The editor lays out pages the way Word does. You and the model edit the same open document, and every change saves back to the file.",
+    "displayName": "Word in Chat",
+    "shortDescription": "View and edit DOCX files",
+    "longDescription": "Open DOCX documents in a page-layout editor. Read, search, and rewrite text with chat while keeping existing styles. Apply formatting, edit tables, and adjust page layout. Highlight text and choose Add to chat. Review comments alongside the document. Download an edited copy of an uploaded attachment. Host-managed files save through the host when writing is permitted.",
     "developerName": "Alex Pickett",
     "category": "Productivity",
     "capabilities": [

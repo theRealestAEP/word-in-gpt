@@ -6,6 +6,15 @@ export const host = createAppTransport();
 /** The file the host passes when the user opens a .docx. */
 export type HostFile = { name: string; resourceUri: string };
 
+const uploadedFiles = new Map<string, FileSnapshot>();
+const uploadUrls = new Map<string, string>();
+export const isUploadedFile = (uri: string): boolean => uri.startsWith("word-upload://");
+
+export function receiveUpload(file: HostFile, blob?: string, downloadUrl?: string): void {
+  if (blob) uploadedFiles.set(file.resourceUri, { bytes: base64ToBytes(blob), etag: "0", writable: true });
+  if (downloadUrl) uploadUrls.set(file.resourceUri, downloadUrl);
+}
+
 export type FileSnapshot = { bytes: Uint8Array; etag: string | null; writable: boolean };
 
 export type WriteResult =
@@ -23,12 +32,68 @@ type ReadResult = {
 
 const FILE_TIMEOUT_MS = 60_000;
 
+type UploadToolResult = {
+  structuredContent?: { file?: HostFile };
+  _meta?: { fileBlob?: string; fileDownloadUrl?: string };
+  isError?: boolean;
+  content?: Array<{ text: string }>;
+};
+
 export function isHostFile(value: unknown): value is HostFile {
   const file = value as HostFile | undefined;
   return typeof file?.name === "string" && typeof file.resourceUri === "string";
 }
 
 export async function readFile(uri: string): Promise<FileSnapshot> {
+  if (isUploadedFile(uri)) {
+    const snapshot = uploadedFiles.get(uri);
+    if (snapshot) return snapshot;
+    const openai = (window as unknown as { openai?: {
+      toolResponseMetadata?: { mcp_tool_result?: UploadToolResult; call_tool_result?: UploadToolResult };
+      getFileDownloadUrl?: (input: { fileId: string }) => Promise<{ downloadUrl: string }>;
+    } }).openai;
+    const metadata = openai?.toolResponseMetadata;
+    for (const result of [metadata?.mcp_tool_result, metadata?.call_tool_result]) {
+      if (result?.structuredContent?.file?.resourceUri === uri) {
+        receiveUpload(result.structuredContent.file, result._meta?.fileBlob, result._meta?.fileDownloadUrl);
+        const restored = uploadedFiles.get(uri);
+        if (restored) return restored;
+      }
+    }
+    const fileId = uri.slice("word-upload://".length);
+    let downloadUrl = uploadUrls.get(uri);
+    if (!downloadUrl) {
+      if (!openai?.getFileDownloadUrl) throw new Error("Attach the DOCX again to reopen it.");
+      ({ downloadUrl } = await openai.getFileDownloadUrl({ fileId }));
+    }
+    try {
+      let response = await fetch(downloadUrl);
+      if ((response.status === 401 || response.status === 403) && openai?.getFileDownloadUrl) {
+        ({ downloadUrl } = await openai.getFileDownloadUrl({ fileId }));
+        response = await fetch(downloadUrl);
+      }
+      if (!response.ok) throw new Error("The attachment download failed.");
+      const direct = { bytes: new Uint8Array(await response.arrayBuffer()), etag: "0", writable: true };
+      uploadedFiles.set(uri, direct);
+      return direct;
+    } catch {
+      // Some hosts restrict browser downloads. Fetch through the server only then.
+    }
+    const result = await host.request<UploadToolResult>("tools/call", {
+      name: "word_attachment_read", arguments: { downloadUrl },
+    }, FILE_TIMEOUT_MS);
+    if (result.isError) throw new Error(result.content![0].text);
+    if (result._meta?.fileDownloadUrl) {
+      const response = await fetch(result._meta.fileDownloadUrl);
+      if (!response.ok) throw new Error("The attachment could not be restored. Attach the DOCX again.");
+      const snapshot = { bytes: new Uint8Array(await response.arrayBuffer()), etag: "0", writable: true };
+      uploadedFiles.set(uri, snapshot);
+      return snapshot;
+    }
+    if (!result._meta?.fileBlob) throw new Error("The attachment could not be restored. Attach the DOCX again.");
+    uploadedFiles.set(uri, { bytes: base64ToBytes(result._meta.fileBlob), etag: "0", writable: true });
+    return uploadedFiles.get(uri)!;
+  }
   if (uri.startsWith("word-local://")) {
     const snapshot = await callServer<{ blob: string; etag: string; writable: boolean }>("word_local_read", { uri });
     return { bytes: base64ToBytes(snapshot.blob), etag: snapshot.etag, writable: snapshot.writable };
@@ -46,6 +111,11 @@ export async function readFile(uri: string): Promise<FileSnapshot> {
 
 /** Without `ifMatch` the write replaces whatever is on disk. */
 export function writeFile(uri: string, bytes: Uint8Array, ifMatch: string | null): Promise<WriteResult> {
+  if (isUploadedFile(uri)) {
+    const etag = String(Number(uploadedFiles.get(uri)!.etag) + 1);
+    uploadedFiles.set(uri, { bytes, etag, writable: true });
+    return Promise.resolve({ outcome: "saved", etag });
+  }
   if (uri.startsWith("word-local://")) {
     return callServer("word_local_write", { uri, blob: bytesToBase64(bytes), ...(ifMatch ? { ifMatch } : {}) });
   }
@@ -54,6 +124,30 @@ export function writeFile(uri: string, bytes: Uint8Array, ifMatch: string | null
     { uri, blob: bytesToBase64(bytes), ...(ifMatch ? { ifMatch } : {}) },
     FILE_TIMEOUT_MS,
   );
+}
+
+/** Export the edited copy; uploaded files cannot overwrite their source attachment. */
+export async function downloadDocx(file: HostFile, bytes: Uint8Array): Promise<void> {
+  const copy = new File([new Uint8Array(bytes)], file.name, { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+  const openai = (window as unknown as { openai?: {
+    uploadFile?: (file: File) => Promise<{ fileId: string }>;
+    getFileDownloadUrl?: (input: { fileId: string }) => Promise<{ downloadUrl: string }>;
+    openExternal?: (input: { href: string }) => void;
+  } }).openai;
+  if (openai?.uploadFile && openai.getFileDownloadUrl && openai.openExternal) {
+    const { fileId } = await openai.uploadFile(copy);
+    const { downloadUrl } = await openai.getFileDownloadUrl({ fileId });
+    openai.openExternal({ href: downloadUrl });
+    return;
+  }
+  const url = URL.createObjectURL(copy);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = file.name;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 export async function callServer<T>(name: string, args: Record<string, unknown> = {}): Promise<T> {

@@ -7438,7 +7438,7 @@ var require_cfb = __commonJS({
       var CRC322 = {};
       CRC322.version = "1.2.1";
       function signed_crc_table() {
-        var c = 0, table2 = new Array(256);
+        var c = 0, table3 = new Array(256);
         for (var n = 0; n != 256; ++n) {
           c = n;
           c = c & 1 ? -306674912 ^ c >>> 1 : c >>> 1;
@@ -7449,20 +7449,20 @@ var require_cfb = __commonJS({
           c = c & 1 ? -306674912 ^ c >>> 1 : c >>> 1;
           c = c & 1 ? -306674912 ^ c >>> 1 : c >>> 1;
           c = c & 1 ? -306674912 ^ c >>> 1 : c >>> 1;
-          table2[n] = c;
+          table3[n] = c;
         }
-        return typeof Int32Array !== "undefined" ? new Int32Array(table2) : table2;
+        return typeof Int32Array !== "undefined" ? new Int32Array(table3) : table3;
       }
       var T0 = signed_crc_table();
       function slice_by_16_tables(T) {
-        var c = 0, v = 0, n = 0, table2 = typeof Int32Array !== "undefined" ? new Int32Array(4096) : new Array(4096);
-        for (n = 0; n != 256; ++n) table2[n] = T[n];
+        var c = 0, v = 0, n = 0, table3 = typeof Int32Array !== "undefined" ? new Int32Array(4096) : new Array(4096);
+        for (n = 0; n != 256; ++n) table3[n] = T[n];
         for (n = 0; n != 256; ++n) {
           v = T[n];
-          for (c = 256 + n; c < 4096; c += 256) v = table2[c] = v >>> 8 ^ T[v & 255];
+          for (c = 256 + n; c < 4096; c += 256) v = table3[c] = v >>> 8 ^ T[v & 255];
         }
         var out = [];
-        for (n = 1; n != 16; ++n) out[n - 1] = typeof Int32Array !== "undefined" ? table2.subarray(n * 256, n * 256 + 256) : table2.slice(n * 256, n * 256 + 256);
+        for (n = 1; n != 16; ++n) out[n - 1] = typeof Int32Array !== "undefined" ? table3.subarray(n * 256, n * 256 + 256) : table3.slice(n * 256, n * 256 + 256);
         return out;
       }
       var TT = slice_by_16_tables(T0);
@@ -10403,9 +10403,9 @@ var Class = class {
   constructor(..._args) {
   }
 };
-function members(proto, table2) {
-  for (const key in table2) {
-    const desc = Object.getOwnPropertyDescriptor(table2, key);
+function members(proto, table3) {
+  for (const key in table3) {
+    const desc = Object.getOwnPropertyDescriptor(table3, key);
     if (desc.get)
       Object.defineProperty(proto, key, { ...desc, enumerable: false });
     else
@@ -10420,10 +10420,10 @@ function hide(inst, key, value) {
   return own(inst, key, value, false);
 }
 // @__NO_SIDE_EFFECTS__
-function derived(computes, table2) {
+function derived(computes, table3) {
   for (const key in computes) {
     const compute = computes[key];
-    Object.defineProperty(table2, key, {
+    Object.defineProperty(table3, key, {
       configurable: true,
       enumerable: true,
       get() {
@@ -10434,7 +10434,7 @@ function derived(computes, table2) {
       }
     });
   }
-  return table2;
+  return table3;
 }
 function defineBound(proto, key, fn) {
   Object.defineProperty(proto, key, {
@@ -36660,21 +36660,21 @@ var Protocol = class {
    * the error appropriately (e.g., by failing the task, logging, etc.). The Protocol layer
    * simply propagates the error.
    */
-  async _enqueueTaskMessage(taskId, message, sessionId) {
+  async _enqueueTaskMessage(taskId, message, sessionId2) {
     if (!this._taskStore || !this._taskMessageQueue) {
       throw new Error("Cannot enqueue task message: taskStore and taskMessageQueue are not configured");
     }
     const maxQueueSize = this._options?.maxTaskQueueSize;
-    await this._taskMessageQueue.enqueue(taskId, message, sessionId, maxQueueSize);
+    await this._taskMessageQueue.enqueue(taskId, message, sessionId2, maxQueueSize);
   }
   /**
    * Clears the message queue for a task and rejects any pending request resolvers.
    * @param taskId The task ID whose queue should be cleared
    * @param sessionId Optional session ID for binding the operation to a specific session
    */
-  async _clearTaskQueue(taskId, sessionId) {
+  async _clearTaskQueue(taskId, sessionId2) {
     if (this._taskMessageQueue) {
-      const messages = await this._taskMessageQueue.dequeueAll(taskId, sessionId);
+      const messages = await this._taskMessageQueue.dequeueAll(taskId, sessionId2);
       for (const message of messages) {
         if (message.type === "request" && isJSONRPCRequest(message.message)) {
           const requestId = message.message.id;
@@ -36717,7 +36717,7 @@ var Protocol = class {
       }, { once: true });
     });
   }
-  requestTaskStore(request, sessionId) {
+  requestTaskStore(request, sessionId2) {
     const taskStore = this._taskStore;
     if (!taskStore) {
       throw new Error("No task store configured");
@@ -36730,18 +36730,18 @@ var Protocol = class {
         return await taskStore.createTask(taskParams, request.id, {
           method: request.method,
           params: request.params
-        }, sessionId);
+        }, sessionId2);
       },
       getTask: async (taskId) => {
-        const task = await taskStore.getTask(taskId, sessionId);
+        const task = await taskStore.getTask(taskId, sessionId2);
         if (!task) {
           throw new McpError(ErrorCode.InvalidParams, "Failed to retrieve task: Task not found");
         }
         return task;
       },
       storeTaskResult: async (taskId, status, result) => {
-        await taskStore.storeTaskResult(taskId, status, result, sessionId);
-        const task = await taskStore.getTask(taskId, sessionId);
+        await taskStore.storeTaskResult(taskId, status, result, sessionId2);
+        const task = await taskStore.getTask(taskId, sessionId2);
         if (task) {
           const notification = TaskStatusNotificationSchema.parse({
             method: "notifications/tasks/status",
@@ -36754,18 +36754,18 @@ var Protocol = class {
         }
       },
       getTaskResult: (taskId) => {
-        return taskStore.getTaskResult(taskId, sessionId);
+        return taskStore.getTaskResult(taskId, sessionId2);
       },
       updateTaskStatus: async (taskId, status, statusMessage) => {
-        const task = await taskStore.getTask(taskId, sessionId);
+        const task = await taskStore.getTask(taskId, sessionId2);
         if (!task) {
           throw new McpError(ErrorCode.InvalidParams, `Task "${taskId}" not found - it may have been cleaned up`);
         }
         if (isTerminal(task.status)) {
           throw new McpError(ErrorCode.InvalidParams, `Cannot update task "${taskId}" from terminal status "${task.status}" to "${status}". Terminal states (completed, failed, cancelled) cannot transition to other states.`);
         }
-        await taskStore.updateTaskStatus(taskId, status, statusMessage, sessionId);
-        const updatedTask = await taskStore.getTask(taskId, sessionId);
+        await taskStore.updateTaskStatus(taskId, status, statusMessage, sessionId2);
+        const updatedTask = await taskStore.getTask(taskId, sessionId2);
         if (updatedTask) {
           const notification = TaskStatusNotificationSchema.parse({
             method: "notifications/tasks/status",
@@ -36778,7 +36778,7 @@ var Protocol = class {
         }
       },
       listTasks: (cursor) => {
-        return taskStore.listTasks(cursor, sessionId);
+        return taskStore.listTasks(cursor, sessionId2);
       }
     };
   }
@@ -37129,8 +37129,8 @@ var Server = class extends Protocol {
     this._serverInfo = _serverInfo;
     this._loggingLevels = /* @__PURE__ */ new Map();
     this.LOG_LEVEL_SEVERITY = new Map(LoggingLevelSchema.options.map((level, index) => [level, index]));
-    this.isMessageIgnored = (level, sessionId) => {
-      const currentLevel = this._loggingLevels.get(sessionId);
+    this.isMessageIgnored = (level, sessionId2) => {
+      const currentLevel = this._loggingLevels.get(sessionId2);
       return currentLevel ? this.LOG_LEVEL_SEVERITY.get(level) < this.LOG_LEVEL_SEVERITY.get(currentLevel) : false;
     };
     this._capabilities = options?.capabilities ?? {};
@@ -37464,9 +37464,9 @@ var Server = class extends Protocol {
    * @param params
    * @param sessionId optional for stateless and backward compatibility
    */
-  async sendLoggingMessage(params, sessionId) {
+  async sendLoggingMessage(params, sessionId2) {
     if (this._capabilities.logging) {
-      if (!this.isMessageIgnored(params.level, sessionId)) {
+      if (!this.isMessageIgnored(params.level, sessionId2)) {
         return this.notification({ method: "notifications/message", params });
       }
     }
@@ -37718,7 +37718,7 @@ var McpServer = class {
   /**
    * Validates tool input arguments against the tool's input schema.
    */
-  async validateToolInput(tool, args, toolName) {
+  async validateToolInput(tool, args, toolName2) {
     if (!tool.inputSchema) {
       return void 0;
     }
@@ -37728,14 +37728,14 @@ var McpServer = class {
     if (!parseResult.success) {
       const error62 = "error" in parseResult ? parseResult.error : "Unknown error";
       const errorMessage = getParseErrorMessage(error62);
-      throw new McpError(ErrorCode.InvalidParams, `Input validation error: Invalid arguments for tool ${toolName}: ${errorMessage}`);
+      throw new McpError(ErrorCode.InvalidParams, `Input validation error: Invalid arguments for tool ${toolName2}: ${errorMessage}`);
     }
     return parseResult.data;
   }
   /**
    * Validates tool output against the tool's output schema.
    */
-  async validateToolOutput(tool, result, toolName) {
+  async validateToolOutput(tool, result, toolName2) {
     if (!tool.outputSchema) {
       return;
     }
@@ -37746,14 +37746,14 @@ var McpServer = class {
       return;
     }
     if (!result.structuredContent) {
-      throw new McpError(ErrorCode.InvalidParams, `Output validation error: Tool ${toolName} has an output schema but no structured content was provided`);
+      throw new McpError(ErrorCode.InvalidParams, `Output validation error: Tool ${toolName2} has an output schema but no structured content was provided`);
     }
     const outputObj = normalizeObjectSchema(tool.outputSchema);
     const parseResult = await safeParseAsync3(outputObj, result.structuredContent);
     if (!parseResult.success) {
       const error62 = "error" in parseResult ? parseResult.error : "Unknown error";
       const errorMessage = getParseErrorMessage(error62);
-      throw new McpError(ErrorCode.InvalidParams, `Output validation error: Invalid structured content for tool ${toolName}: ${errorMessage}`);
+      throw new McpError(ErrorCode.InvalidParams, `Output validation error: Invalid structured content for tool ${toolName2}: ${errorMessage}`);
     }
   }
   /**
@@ -38265,8 +38265,8 @@ var McpServer = class {
    * @param params
    * @param sessionId optional for stateless and backward compatibility
    */
-  async sendLoggingMessage(params, sessionId) {
-    return this.server.sendLoggingMessage(params, sessionId);
+  async sendLoggingMessage(params, sessionId2) {
+    return this.server.sendLoggingMessage(params, sessionId2);
   }
   /**
    * Sends a resource list changed event to the client, if connected.
@@ -39554,7 +39554,7 @@ function unzipSync(data, opts) {
   return files;
 }
 
-// node_modules/@wordinweb/agent/dist/chunk-EMDLXVNY.js
+// node_modules/@wordinweb/agent/dist/chunk-RQ74KQML.js
 var CFB = __toESM(require_cfb(), 1);
 var te2 = new TextEncoder();
 var td2 = new TextDecoder();
@@ -40852,7 +40852,7 @@ function toArabicLetter(n, letters) {
 }
 function toRoman(n) {
   if (n <= 0 || n >= 4e3) return String(n);
-  const table2 = [
+  const table22 = [
     [1e3, "M"],
     [900, "CM"],
     [500, "D"],
@@ -40868,7 +40868,7 @@ function toRoman(n) {
     [1, "I"]
   ];
   let out = "";
-  for (const [v, s] of table2) {
+  for (const [v, s] of table22) {
     while (n >= v) {
       out += s;
       n -= v;
@@ -44130,6 +44130,10 @@ function parseCell(tc, ctx) {
     if (tcW && attr(tcW, "type") === "dxa") {
       const w = intAttr(tcW, "w");
       if (w) props.width = twipsToPx(w);
+    } else if (tcW && attr(tcW, "type") === "pct") {
+      const raw = attr(tcW, "w");
+      const num = raw !== void 0 ? parseFloat(raw) : NaN;
+      if (Number.isFinite(num) && num > 0) props.widthPct = raw.trim().endsWith("%") ? num / 100 : num / 5e3;
     } else if (tcW && attr(tcW, "type") === "auto") {
       props.widthAuto = true;
     }
@@ -46497,8 +46501,8 @@ var _DocxDocument = class _DocxDocument2 {
       }
       return length;
     };
-    const normalize = (table2, available) => {
-      const source = table2.src;
+    const normalize = (table22, available) => {
+      const source = table22.src;
       if (!source) return;
       const tableProps = child(source, "tblPr");
       const tableWidth = child(tableProps, "tblW");
@@ -46515,7 +46519,7 @@ var _DocxDocument = class _DocxDocument2 {
       if (target <= 0 || authoredTotal >= target * 0.1) return;
       const floor = 600;
       const widths = new Array(columns.length).fill(floor);
-      for (const row of table2.rows) {
+      for (const row of table22.rows) {
         let column = 0;
         for (const cell of row.cells) {
           const span = Math.max(1, Math.min(cell.props.gridSpan, columns.length - column));
@@ -48138,7 +48142,11 @@ var WORD_FONT_METRICS = {
   // lineGap 99 / upem 2048 = 1.2734em (14.0pt at 11pt - phase23's sub-bullet
   // lists run 14.0pt/line among 13.5pt Calibri text).
   symbol: { asc: 1.005371, desc: 0.219727, gap: 0.04834 },
-  symbolmt: { asc: 1.005371, desc: 0.219727, gap: 0.04834 },
+  // A Symbol bullet LABEL (the engine's metrics face) sizes its line without
+  // the lineGap: Word runs an 11pt bullet at 13.5pt among 11pt Times New
+  // Roman (wild-termsheet-behinddoc) and a 10pt one at 12.25pt, both
+  // asc + desc; with the gap they would be 14.0pt and 12.75pt.
+  symbolmt: { asc: 1.005371, desc: 0.219727, gap: 0 },
   "pingfang sc": { asc: 2.27, desc: 0.7627, gap: 0 },
   "songti sc": { asc: 2.27, desc: 0.7627, gap: 0 },
   "heiti sc": { asc: 2.27, desc: 0.7627, gap: 0 },
@@ -48165,13 +48173,19 @@ function quantizeQuarterPt(px2) {
   return Math.round(px2 / QUARTER_PT_PX) * QUARTER_PT_PX;
 }
 var FACE_SUFFIX = /\s+(bold italic|italic bold|bold|italic)$/i;
+var WORD_REPLACES = {
+  "liberation serif": "Times New Roman",
+  "liberation sans": "Arial",
+  "liberation mono": "Courier New"
+};
 function normalizeFamily(family, bold, italic) {
   if (family === "\u5B8B\u4F53") family = "SimSun";
+  const replaced = (f) => WORD_REPLACES[f.toLowerCase()] ?? f;
   const m = FACE_SUFFIX.exec(family);
-  if (!m) return { family, bold, italic };
+  if (!m) return { family: replaced(family), bold, italic };
   const suffix = m[1].toLowerCase();
   return {
-    family: family.slice(0, m.index).trim() || family,
+    family: replaced(family.slice(0, m.index).trim() || family),
     bold: bold || suffix.includes("bold"),
     italic: italic || suffix.includes("italic")
   };
@@ -53026,7 +53040,7 @@ var Engine = class {
       hfStart: p.hfStart,
       floats: [...this.floats.get(p) ?? []],
       floatWrapRegistered: [...this.floatWrapRegistered],
-      floatingTablePositions: [...this.floatingTablePositions].map(([table2, position2]) => [table2, { ...position2 }]),
+      floatingTablePositions: [...this.floatingTablePositions].map(([table22, position2]) => [table22, { ...position2 }]),
       col: this.col,
       y: this.y,
       sp: this.sp,
@@ -53066,7 +53080,7 @@ var Engine = class {
     p.hfStart = s.hfStart;
     this.floats.set(p, s.floats);
     this.floatWrapRegistered = new Map(s.floatWrapRegistered);
-    this.floatingTablePositions = new Map(s.floatingTablePositions.map(([table2, position2]) => [table2, { ...position2 }]));
+    this.floatingTablePositions = new Map(s.floatingTablePositions.map(([table22, position2]) => [table22, { ...position2 }]));
     this.cur = p;
     this.col = s.col;
     this.y = s.y;
@@ -54165,7 +54179,7 @@ var Engine = class {
           "hRel" in s && s.hRel === "char" ? charX : this.colX,
           "vRel" in s && s.vRel === "line" ? lineY : paraTop
         );
-        if ("wrap" in s && s.wrap && s.wrap !== "none" && !("behind" in s && s.behind)) reBreak = true;
+        if ("wrap" in s && s.wrap && s.wrap !== "none") reBreak = true;
       }
       if (reBreak) broken = breakNow(paraTop);
     };
@@ -55865,7 +55879,7 @@ var Engine = class {
             autofit: shape.autofitHeight ? "resizeShape" : shape.shrinkText ? "shrinkText" : "none"
           };
         }
-        if (shape.wrap && shape.wrap !== "none" && (!shape.behind || page.physIndex === -1)) {
+        if (shape.wrap && shape.wrap !== "none") {
           const d = shape.dist ?? { t: 0, b: 0, l: 0, r: 0 };
           const list = this.floats.get(page) ?? [];
           list.push({
@@ -56062,7 +56076,9 @@ var Engine = class {
     if (tbl.props.layout === "fixed") return base;
     const gridTotal = tbl.grid.reduce((a, b) => a + b, 0);
     const target = base.reduce((a, b) => a + b, 0);
-    const cellsDeclareWidths = tbl.rows.some((r) => r.cells.some((c) => c.props.width !== void 0));
+    const cellsDeclareWidths = tbl.rows.some(
+      (r) => r.cells.some((c) => c.props.width !== void 0 || c.props.widthPct !== void 0)
+    );
     const containsHyperlink = tbl.rows.some(
       (row) => row.cells.some(
         (cell) => cell.blocks.some(
@@ -57221,7 +57237,14 @@ var Engine = class {
       if (boundaryPara === void 0) continue;
       const above = keptTops.filter((t) => paraOfTop(part.keep, t) === boundaryPara);
       const below = restTops.filter((t) => paraOfTop(part.rest, t) === boundaryPara);
-      if (below.length !== 1 || above.length === 0) continue;
+      if (above.length === 0) continue;
+      if (above.length === 1 && below.length > 1) {
+        const moved2 = part.keep.filter((it) => topOf(it) >= above[0] - 0.01);
+        part.keep = part.keep.filter((it) => topOf(it) < above[0] - 0.01);
+        part.rest = [...moved2, ...part.rest];
+        continue;
+      }
+      if (below.length !== 1) continue;
       const moveTop = above.length >= 3 ? above[above.length - 1] : above[0];
       const moved = part.keep.filter((it) => topOf(it) >= moveTop - 0.01);
       part.keep = part.keep.filter((it) => topOf(it) < moveTop - 0.01);
@@ -57895,7 +57918,8 @@ function distributePctColumns(grid, tableWidth, margins) {
 }
 function resolveGrid(tbl, available, overflowAllowed = false, cellMargins = 0, pctBoxAddsMargins = false) {
   const fixedOverflow = overflowAllowed && tbl.props.layout === "fixed";
-  const cap = fixedOverflow ? Number.POSITIVE_INFINITY : available;
+  const pctOverflow = overflowAllowed && (tbl.props.widthPct ?? 0) > 1;
+  const cap = fixedOverflow || pctOverflow ? Number.POSITIVE_INFINITY : available;
   const pctBase = fixedOverflow && pctBoxAddsMargins ? available + cellMargins : available;
   const target = Math.min(
     cap,
@@ -64355,7 +64379,7 @@ function clipboardBlocksHtml(blocks) {
     if (color2) styles.push(`color:#${color2}`);
     return `<span${styles.length ? ` style="${styles.join(";")}"` : ""}>${escapeHtml(textOf(run))}</span>`;
   }).join("")}</p>`;
-  const renderTable = (table2) => `<table>${table2.children.filter((node2) => localName(node2.name) === "tr").map((row) => `<tr>${row.children.filter((node2) => localName(node2.name) === "tc").map((cellNode) => `<td>${cellNode.children.filter((node2) => localName(node2.name) === "p").map(renderParagraph).join("")}</td>`).join("")}</tr>`).join("")}</table>`;
+  const renderTable = (table22) => `<table>${table22.children.filter((node2) => localName(node2.name) === "tr").map((row) => `<tr>${row.children.filter((node2) => localName(node2.name) === "tc").map((cellNode) => `<td>${cellNode.children.filter((node2) => localName(node2.name) === "p").map(renderParagraph).join("")}</td>`).join("")}</tr>`).join("")}</table>`;
   const payload = encodeURIComponent(encodeClipboardOoxml(blocks));
   const content = blocks.map((block) => localName(block.name) === "tbl" ? renderTable(block) : renderParagraph(block)).join("");
   return `<div ${CLIPBOARD_OOXML_ATTR}="${payload}">${content}</div>`;
@@ -74153,7 +74177,7 @@ var _DocxEditor = class _DocxEditor2 {
     const bodyBottom = parseFloat(page.dataset.bodyBottom ?? "0");
     if (ly < bodyTop || ly > bodyBottom) return null;
     if (this.nearestCaret(x2, y, "body")) return null;
-    const table2 = handle.grips.filter((grip) => {
+    const table22 = handle.grips.filter((grip) => {
       if (grip.item.axis !== "move" || grip.el.parentElement !== surface) return false;
       if (ly <= grip.item.y2 + 1 || lx < grip.item.x || lx > (grip.item.x2 ?? grip.item.x)) return false;
       const parent2 = this.host.doc.findParentOf(grip.item.tbl);
@@ -74161,18 +74185,18 @@ var _DocxEditor = class _DocxEditor2 {
       const tblPr = grip.item.tbl.children.find((child4) => localName(child4.name) === "tblPr");
       return tblPr?.children.some((child4) => localName(child4.name) === "tblpPr") !== true;
     }).sort((a, b) => b.item.y2 - a.item.y2)[0];
-    if (!table2) return null;
-    const parent = this.host.doc.findParentOf(table2.item.tbl);
+    if (!table22) return null;
+    const parent = this.host.doc.findParentOf(table22.item.tbl);
     const nearby = handle.bindings.filter(
-      (binding2) => binding2.el.parentElement === surface && binding2.item.src?.t && this.regionOf(binding2.item.src.t) === "body" && binding2.item.lineTop <= table2.item.y2 + 1
+      (binding2) => binding2.el.parentElement === surface && binding2.item.src?.t && this.regionOf(binding2.item.src.t) === "body" && binding2.item.lineTop <= table22.item.y2 + 1
     ).sort((a, b) => b.item.lineTop - a.item.lineTop)[0];
     const lineHeight = Math.max(1, nearby?.item.lineHeight ?? 16);
-    const lineCount = Math.max(1, Math.round((ly - table2.item.y2) / lineHeight) + 1);
-    const w = table2.item.tbl.name.includes(":") ? table2.item.tbl.name.slice(0, table2.item.tbl.name.indexOf(":") + 1) : "";
+    const lineCount = Math.max(1, Math.round((ly - table22.item.y2) / lineHeight) + 1);
+    const w = table22.item.tbl.name.includes(":") ? table22.item.tbl.name.slice(0, table22.item.tbl.name.indexOf(":") + 1) : "";
     const paragraphs = [];
     let targetText = null;
     for (let i2 = 0; i2 < lineCount; i2++) {
-      const created = emptyParagraphLike(table2.item.tbl);
+      const created = emptyParagraphLike(table22.item.tbl);
       if (i2 === 0) {
         created.paragraph.children.unshift({ name: `${w}pPr`, attrs: {}, children: [], text: "" });
       }
@@ -74180,7 +74204,7 @@ var _DocxEditor = class _DocxEditor2 {
       targetText = created.text;
     }
     this.host.history?.checkpoint();
-    parent.children.splice(parent.children.indexOf(table2.item.tbl) + 1, 0, ...paragraphs);
+    parent.children.splice(parent.children.indexOf(table22.item.tbl) + 1, 0, ...paragraphs);
     this.pendingClickTypeCheckpoint = true;
     this.host.doc.refresh();
     this.host.rerender(void 0, "global");
@@ -75343,16 +75367,16 @@ var _DocxEditor = class _DocxEditor2 {
         t.text = t.text.slice(0, r.start) + t.text.slice(r.end);
       }
     }
-    for (const table2 of fullySelectedTables) {
-      const parent = this.host.doc.findParentOf(table2);
+    for (const table22 of fullySelectedTables) {
+      const parent = this.host.doc.findParentOf(table22);
       if (!parent) continue;
       if (collabEmit) {
-        const cellP = firstParagraphIn(table2);
+        const cellP = firstParagraphIn(table22);
         const cellParagraphId = cellP ? this.host.doc.stableIds.idOf(cellP) : void 0;
         if (!cellP || cellParagraphId === void 0) continue;
         let rescueT = null;
-        if (first && textElements(table2).includes(first.t)) {
-          const idx = parent.children.indexOf(table2);
+        if (first && textElements(table22).includes(first.t)) {
+          const idx = parent.children.indexOf(table22);
           const following = parent.children.slice(idx + 1).find((c) => localName(c.name) === "p");
           const preceding = [...parent.children.slice(0, idx)].reverse().find((c) => localName(c.name) === "p");
           rescueT = (following && firstTextOf(following)) ?? (preceding && lastTextOf(preceding)) ?? null;
@@ -75362,9 +75386,9 @@ var _DocxEditor = class _DocxEditor2 {
         if (rescueT && first) first = { t: rescueT, run: first.run, offset: 0 };
         continue;
       }
-      const empty = emptyParagraphLike(table2);
-      parent.children.splice(parent.children.indexOf(table2), 1, empty.paragraph);
-      if (first && textElements(table2).includes(first.t)) {
+      const empty = emptyParagraphLike(table22);
+      parent.children.splice(parent.children.indexOf(table22), 1, empty.paragraph);
+      if (first && textElements(table22).includes(first.t)) {
         first = { t: empty.text, run: first.run, offset: 0 };
       }
     }
@@ -81646,8 +81670,8 @@ function objectRef(runId, index) {
 function blockObjectRef(blockId, runIndex, contentIndex) {
   return `object:block:${blockId}:${runIndex}:${contentIndex}`;
 }
-function viewRef(revision, kind, index) {
-  return `view:${encodeURIComponent(revision)}:${kind}:${index}`;
+function viewRef(revision2, kind, index) {
+  return `view:${encodeURIComponent(revision2)}:${kind}:${index}`;
 }
 function assetRef(index) {
   return `asset:${index}`;
@@ -82002,10 +82026,10 @@ function shapeBase(shape) {
   };
 }
 var SemanticInspector = class {
-  constructor(doc, ids, revision) {
+  constructor(doc, ids, revision2) {
     this.doc = doc;
     this.ids = ids;
-    this.revision = revision;
+    this.revision = revision2;
     this.stories = /* @__PURE__ */ new Map();
     this.entries = /* @__PURE__ */ new Map();
     this.objects = /* @__PURE__ */ new Map();
@@ -82445,17 +82469,17 @@ var SemanticInspector = class {
     };
   }
   table(indexed) {
-    const table2 = indexed.block;
+    const table22 = indexed.block;
     return {
       type: "table",
       ref: indexed.ref,
       editable: indexed.editable,
       story: indexed.story,
-      rows: table2.rows.length,
-      columns: Math.max(0, ...table2.rows.map((row) => row.cells.length)),
-      styleId: table2.props.styleId,
-      floating: Boolean(table2.props.floating),
-      cells: table2.rows.flatMap((row, rowIndex) => row.cells.map((cell, columnIndex) => ({
+      rows: table22.rows.length,
+      columns: Math.max(0, ...table22.rows.map((row) => row.cells.length)),
+      styleId: table22.props.styleId,
+      floating: Boolean(table22.props.floating),
+      cells: table22.rows.flatMap((row, rowIndex) => row.cells.map((cell, columnIndex) => ({
         row: rowIndex,
         column: columnIndex,
         blocks: cell.blocks.flatMap((block) => {
@@ -82634,7 +82658,7 @@ function projectionStories(doc) {
   for (const [id, blocks] of doc.endnotes) stories.set(`endnote:${id}`, blocks);
   return stories;
 }
-function projectStory(doc, ids, revision, storyId = "body", mode = "md", cursorValue, maxBlocks = 200, maxCharacters = 24e3) {
+function projectStory(doc, ids, revision2, storyId = "body", mode = "md", cursorValue, maxBlocks = 200, maxCharacters = 24e3) {
   if (mode !== "text" && mode !== "md" && mode !== "outline") throw new Error("mode must be text, md, or outline");
   if (!Number.isInteger(maxBlocks) || maxBlocks < 1 || maxBlocks > 2e3) throw new Error("maxBlocks must be between 1 and 2000");
   if (!Number.isInteger(maxCharacters) || maxCharacters < 1 || maxCharacters > 2e5) throw new Error("maxCharacters must be between 1 and 200000");
@@ -82643,7 +82667,7 @@ function projectStory(doc, ids, revision, storyId = "body", mode = "md", cursorV
   let index = 0;
   if (cursorValue !== void 0) {
     const match = /^docmd:(.*):(\d+)$/.exec(cursorValue);
-    if (!match || match[1] !== revision) throw new Error("Invalid or stale cursor");
+    if (!match || match[1] !== revision2) throw new Error("Invalid or stale cursor");
     index = Number(match[2]);
   }
   const lines = [];
@@ -82659,8 +82683,8 @@ function projectStory(doc, ids, revision, storyId = "body", mode = "md", cursorV
     return [line.text.slice(line.anchor.marker)];
   });
   const cellText3 = (cellBlocks) => cellParts(cellBlocks).filter((value) => value.length > 0).join(" ").replace(/\|/g, "\\|");
-  const emitTable = (table2) => {
-    const tableId = table2.src ? ids.idOf(table2.src) : void 0;
+  const emitTable = (table22) => {
+    const tableId = table22.src ? ids.idOf(table22.src) : void 0;
     const anchor2 = {
       line: 0,
       role: "table",
@@ -82669,9 +82693,9 @@ function projectStory(doc, ids, revision, storyId = "body", mode = "md", cursorV
       editable: false,
       segments: []
     };
-    const columns = Math.max(1, ...table2.rows.map((row) => row.cells.length));
+    const columns = Math.max(1, ...table22.rows.map((row) => row.cells.length));
     emit("", structure);
-    table2.rows.forEach((row, rowIndex) => {
+    table22.rows.forEach((row, rowIndex) => {
       emit(`| ${Array.from({ length: columns }, (_, column) => cellText3(row.cells[column]?.blocks ?? [])).join(" | ")} |`, anchor2);
       if (rowIndex === 0) emit(`| ${Array.from({ length: columns }, () => "---").join(" | ")} |`, anchor2);
     });
@@ -82702,14 +82726,14 @@ function projectStory(doc, ids, revision, storyId = "body", mode = "md", cursorV
   }
   const truncated = index < blocks.length;
   return {
-    revision,
+    revision: revision2,
     story: storyId,
     mode,
     text: lines.join("\n"),
     lines: lines.length,
     window: { cursor: cursorValue ?? null, startBlock, endBlock: index, maxBlocks, maxCharacters },
     anchors,
-    ...truncated ? { next: { value: `docmd:${revision}:${index}` } } : {},
+    ...truncated ? { next: { value: `docmd:${revision2}:${index}` } } : {},
     truncated
   };
 }
@@ -83123,7 +83147,7 @@ function layoutQuality() {
 function px(value) {
   return Math.round(value * 10) / 10;
 }
-function spatialInspect(doc, ids, revision, inspector, pageRange, includeOverlaps = true) {
+function spatialInspect(doc, ids, revision2, inspector, pageRange, includeOverlaps = true) {
   const result = layoutDocument(doc);
   const wanted = selectPages(result, pageRange);
   const maps = sourceMaps(doc, ids);
@@ -83203,7 +83227,7 @@ function spatialInspect(doc, ids, revision, inspector, pageRange, includeOverlap
     }
   }
   return {
-    revision,
+    revision: revision2,
     layout: layoutQuality(),
     totalPages: result.totalPages,
     pages: wanted.map((page) => ({ index: page.index, width: page.width, height: page.height })),
@@ -83211,7 +83235,7 @@ function spatialInspect(doc, ids, revision, inspector, pageRange, includeOverlap
     overlaps
   };
 }
-function fitInspect(doc, ids, revision, inspector, pageRange) {
+function fitInspect(doc, ids, revision2, inspector, pageRange) {
   const result = layoutDocument(doc);
   const wanted = selectPages(result, pageRange);
   const maps = sourceMaps(doc, ids);
@@ -83237,7 +83261,7 @@ function fitInspect(doc, ids, revision, inspector, pageRange) {
     });
     return { page: page.index, contentBottomPx: px(contentBottom), pageBottomPx: px(page.bodyBottom) };
   });
-  return { revision, layout: layoutQuality(), totalPages: result.totalPages, pages, drawings };
+  return { revision: revision2, layout: layoutQuality(), totalPages: result.totalPages, pages, drawings };
 }
 function blankDocxBytes() {
   return composeDocxBytes({ revision: "0", body: [{ type: "paragraph", text: "" }] });
@@ -83452,8 +83476,8 @@ function presenceAfterOperation(doc, operation, hint) {
   }
   return null;
 }
-function projectionKey(story, mode, cursor, revision) {
-  return [revision, story, mode, cursor ?? ""].join("\0");
+function projectionKey(story, mode, cursor, revision2) {
+  return [revision2, story, mode, cursor ?? ""].join("\0");
 }
 function asObject(input2) {
   if (!input2 || typeof input2 !== "object" || Array.isArray(input2)) throw new Error("Tool input must be an object");
@@ -83734,8 +83758,8 @@ var AgentDocument = class _AgentDocument {
     this.addedAssets.set(ref, { ref, bytes: new Uint8Array(bytes), mediaType: mediaType2 });
     return ref;
   }
-  inspector(doc = this.document, revision = this.revision) {
-    return new SemanticInspector(doc, doc.enableStableIds(), revision);
+  inspector(doc = this.document, revision2 = this.revision) {
+    return new SemanticInspector(doc, doc.enableStableIds(), revision2);
   }
   /**
    * Read the document the way its READER reads it, whatever is on screen.
@@ -83808,23 +83832,23 @@ var AgentDocument = class _AgentDocument {
     if (this.target) this.recordInspection(result, result.revision, inspector);
     return result;
   }
-  recordInspection(value, revision, inspector) {
-    const fingerprints = this.inspectedTargets.get(revision) ?? /* @__PURE__ */ new Map();
+  recordInspection(value, revision2, inspector) {
+    const fingerprints = this.inspectedTargets.get(revision2) ?? /* @__PURE__ */ new Map();
     const xmlByScope = /* @__PURE__ */ new WeakMap();
     for (const ref of inspectionReferences(value)) {
       const fingerprint = referenceFingerprint(this.document, inspector, ref, xmlByScope);
       if (fingerprint !== null) fingerprints.set(ref, fingerprint);
     }
-    if (!this.inspectedTargets.has(revision)) {
-      this.inspectedTargets.set(revision, fingerprints);
+    if (!this.inspectedTargets.has(revision2)) {
+      this.inspectedTargets.set(revision2, fingerprints);
       while (this.inspectedTargets.size > 8) this.inspectedTargets.delete(this.inspectedTargets.keys().next().value);
     }
   }
   /** Fingerprints are recorded during a final-view read, so they have to be
    * re-taken in one: compared across views, every block holding a tracked
    * change reads as concurrently edited and the patch dies as "stale". */
-  fingerprintsMatch(revision, refs) {
-    const observed = this.inspectedTargets.get(revision);
+  fingerprintsMatch(revision2, refs) {
+    const observed = this.inspectedTargets.get(revision2);
     if (!observed) return false;
     return this.inFinalView(() => {
       const inspector = this.inspector();
@@ -84175,11 +84199,8 @@ var failure2 = (text) => ({ isError: true, content: [{ type: "text", text }] });
 var EditorSessions = class {
   sessions = /* @__PURE__ */ new Map();
   connect(existingId) {
-    if (existingId) {
-      this.get(existingId);
-      return existingId;
-    }
-    const id = crypto.randomUUID();
+    if (existingId && this.sessions.has(existingId)) return existingId;
+    const id = existingId ?? crypto.randomUUID();
     this.sessions.set(id, { expiry: this.expireLater(id) });
     return id;
   }
@@ -84193,8 +84214,25 @@ var EditorSessions = class {
     if (!session) throw new Error("This editor session has closed. Reopen the document to reconnect.");
     return session;
   }
+  has(id) {
+    return this.sessions.has(id);
+  }
+  attach(id, send, close) {
+    const session = this.get(id);
+    clearTimeout(session.expiry);
+    session.expiry = void 0;
+    session.send = send;
+    session.close = close;
+    this.deliver(session);
+  }
+  deliver(session) {
+    if (!session.send || !session.pending || session.pending.delivered) return;
+    session.pending.delivered = true;
+    session.send(session.pending.command);
+  }
   async poll(id) {
     const session = this.get(id);
+    if (session.send) throw new Error("This editor uses WebSocket commands.");
     if (session.wake) throw new Error("The editor already has a pending poll.");
     clearTimeout(session.expiry);
     session.expiry = this.expireLater(id);
@@ -84230,6 +84268,7 @@ var EditorSessions = class {
           resolve(result);
         }
       };
+      this.deliver(session);
       session.wake?.();
     });
   }
@@ -84247,26 +84286,121 @@ var EditorSessions = class {
     session.pending?.finish(failure2("The editor disconnected before returning a result. An edit may have completed; inspect the document before retrying."));
     session.wake?.();
     this.sessions.delete(id);
+    session.close?.();
   }
 };
 var editorSessions = new EditorSessions();
 
+// src/server/edit-tools.ts
+var toolName = (kind) => `word_document_${kind.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)}`;
+var revision = external_exports.string().min(1).describe("Revision returned by inspecting or projecting the open document.");
+var EDIT_TOOLS = agentCapabilities().filter((tool) => tool.kind !== "tableOp").map((tool) => ({
+  name: toolName(tool.kind),
+  description: tool.description,
+  inputSchema: external_exports.fromJSONSchema(tool.inputSchema).omit({ kind: true }).extend({ revision }),
+  operation: (args) => ({ ...args, kind: tool.kind })
+}));
+var table2 = agentCapabilities(void 0, "tableOp")[0];
+var tableSchema = external_exports.fromJSONSchema(table2.inputSchema);
+var tableTarget = tableSchema.omit({ kind: true, op: true }).extend({ revision });
+var tableActions = {
+  deleteRow: "Delete the table row containing the selected cell.",
+  deleteCol: "Delete the table column containing the selected cell.",
+  deleteTable: "Delete the table containing the selected cell.",
+  rowAbove: "Insert a table row above the selected cell.",
+  rowBelow: "Insert a table row below the selected cell.",
+  colLeft: "Insert a table column to the left of the selected cell.",
+  colRight: "Insert a table column to the right of the selected cell.",
+  mergeRight: "Merge the selected table cell with the cell to its right.",
+  mergeDown: "Merge the selected table cell with the cell below it.",
+  splitCell: "Split the selected table cell."
+};
+for (const [op, description] of Object.entries(tableActions)) {
+  EDIT_TOOLS.push({
+    name: toolName(`table_${op}`),
+    description,
+    inputSchema: tableTarget,
+    operation: (args) => ({ ...args, kind: "tableOp", op })
+  });
+}
+var tableValues = [
+  { kind: "cellShading", description: "Set or clear the selected table cell's fill color." },
+  { kind: "cellVAlign", description: "Set vertical text alignment in the selected table cell." },
+  { kind: "textWrapping", description: "Set the selected table's text wrapping and position." }
+];
+var variants = table2.inputSchema.properties.op.anyOf;
+for (const { kind, description } of tableValues) {
+  const variant = variants.find((schema) => schema.properties?.kind.const === kind);
+  const valueSchema = external_exports.fromJSONSchema(variant).omit({ kind: true });
+  EDIT_TOOLS.push({
+    name: toolName(`table_${kind}`),
+    description,
+    inputSchema: tableTarget.extend(valueSchema.shape),
+    operation: ({ cellRef, suggest, ...values }) => ({
+      kind: "tableOp",
+      cellRef,
+      ...suggest === void 0 ? {} : { suggest },
+      op: { kind, ...values }
+    })
+  });
+}
+
 // src/server/server.ts
-var EDITOR_URI = "ui://word-in-gpt/editor-v6";
+var EDITOR_VERSION = 18;
+var EDITOR_URI = `ui://word-in-gpt/editor-v${EDITOR_VERSION}`;
 var MCP_APP_MIME_TYPE = "text/html;profile=mcp-app";
 var fileEntrypointInput = { file: external_exports.object({ name: external_exports.string(), resourceUri: external_exports.string() }) };
-function createServer(editorHtml, iconSvg, localFiles, sessions = editorSessions) {
+var uploadedFileInput = { file: external_exports.object({
+  download_url: external_exports.string().url(),
+  file_id: external_exports.string().min(1),
+  mime_type: external_exports.string().optional(),
+  file_name: external_exports.string().optional()
+}) };
+function isOpenAIFileUrl(value) {
+  const url2 = new URL(value);
+  return url2.protocol === "https:" && (/^oaisdm[a-z0-9]*\.blob\.core\.windows\.net$/.test(url2.hostname) || url2.hostname.endsWith(".oaiusercontent.com"));
+}
+async function fetchOpenAIFile(downloadUrl) {
+  let url2 = downloadUrl;
+  for (let redirects = 0; redirects <= 3; redirects++) {
+    if (!isOpenAIFileUrl(url2)) throw new Error("Use the download URL supplied by ChatGPT.");
+    const response = await fetch(url2, { redirect: "manual" });
+    const location = response.headers.get("Location");
+    if (response.status < 300 || response.status >= 400 || !location) return response;
+    url2 = new URL(location, url2).href;
+  }
+  throw new Error("The attachment download redirected too many times.");
+}
+var sessionId = external_exports.string().uuid().describe("editorSessionId returned by the document opening tool.");
+var liveTools = LIVE_TOOLS.filter((tool) => tool.name !== "word_document_edit").map((tool) => ({
+  ...tool,
+  inputSchema: external_exports.fromJSONSchema(tool.inputSchema).extend({ editorSessionId: sessionId })
+}));
+var editTools = EDIT_TOOLS.map((tool) => ({
+  ...tool,
+  inputSchema: tool.inputSchema.extend({ editorSessionId: sessionId })
+}));
+function createServer(editorHtml, iconSvg, localFiles, sessions = editorSessions, attachmentDownloadUrl, editorSocketUrl) {
   const icon2 = { src: "data:image/svg+xml," + encodeURIComponent(iconSvg), mimeType: "image/svg+xml", sizes: ["any"] };
-  const server = new McpServer({ name: "word-in-gpt", title: "Word", version: "0.1.0", icons: [icon2] });
-  const sessionId = external_exports.string().uuid().describe("editorSessionId supplied by the open Word editor in model context.");
-  for (const tool of LIVE_TOOLS) {
-    const schema = external_exports.fromJSONSchema(tool.inputSchema);
+  const server = new McpServer({ name: "word-in-gpt", title: "Word in Chat", version: "0.1.4", icons: [icon2] });
+  for (const tool of liveTools) {
     server.registerTool(tool.name, {
       description: `${tool.description}
-Runs against the live Word editor. Use editorSessionId from the editor context.`,
-      inputSchema: schema.extend({ editorSessionId: sessionId }),
-      annotations: { readOnlyHint: !["word_document_edit", "word_document_patch"].includes(tool.name), destructiveHint: ["word_document_edit", "word_document_patch"].includes(tool.name), openWorldHint: false }
+Runs against the live Word editor. Use editorSessionId returned by the document opening tool.`,
+      inputSchema: tool.inputSchema,
+      annotations: { readOnlyHint: tool.name !== "word_document_patch", destructiveHint: tool.name === "word_document_patch", openWorldHint: false }
     }, async ({ editorSessionId, ...args }) => sessions.call(editorSessionId, tool.name, args));
+  }
+  for (const tool of editTools) {
+    server.registerTool(tool.name, {
+      description: `${tool.description}
+Apply to the open document using its observed revision and editorSessionId.`,
+      inputSchema: tool.inputSchema,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
+    }, async ({ editorSessionId, revision: revision2, ...args }) => sessions.call(editorSessionId, "word_document_edit", {
+      revision: revision2,
+      operations: [tool.operation(args)]
+    }));
   }
   const appOnly = { ui: { resourceUri: EDITOR_URI, visibility: ["app"] } };
   const result = (data) => ({ content: [{ type: "text", text: JSON.stringify(data) }], structuredContent: data });
@@ -84275,7 +84409,10 @@ Runs against the live Word editor. Use editorSessionId from the editor context.`
     inputSchema: { editorSessionId: sessionId.optional() },
     _meta: appOnly,
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false }
-  }, async ({ editorSessionId }) => result({ editorSessionId: sessions.connect(editorSessionId) }));
+  }, async ({ editorSessionId }) => {
+    const id = sessions.connect(editorSessionId);
+    return result({ editorSessionId: id, ...editorSocketUrl ? { webSocketUrl: editorSocketUrl(id) } : {} });
+  });
   server.registerTool("word_editor_poll", {
     description: "Wait for the next command for this editor.",
     inputSchema: { editorSessionId: sessionId },
@@ -84314,50 +84451,88 @@ Runs against the live Word editor. Use editorSessionId from the editor context.`
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
     }, async ({ uri, blob, ifMatch }) => result(await localFiles.write(uri, blob, ifMatch)));
   }
-  server.registerResource(
-    "word-editor",
-    EDITOR_URI,
-    { title: "Word editor", mimeType: MCP_APP_MIME_TYPE },
-    async () => ({
-      contents: [{
-        uri: EDITOR_URI,
-        mimeType: MCP_APP_MIME_TYPE,
-        text: editorHtml,
-        _meta: {
-          "openai/ui": { preferredDisplayMode: "fullscreen", availableDisplayModes: ["inline", "fullscreen"] },
-          ui: { prefersBorder: false, csp: { connectDomains: [], resourceDomains: [] } }
-        }
-      }]
-    })
-  );
+  for (let version2 = 5; version2 <= EDITOR_VERSION; version2++) {
+    const uri = `ui://word-in-gpt/editor-v${version2}`;
+    server.registerResource(
+      `word-editor-v${version2}`,
+      uri,
+      { title: "Word in Chat editor", mimeType: MCP_APP_MIME_TYPE },
+      async () => ({
+        contents: [{
+          uri,
+          mimeType: MCP_APP_MIME_TYPE,
+          text: editorHtml,
+          _meta: {
+            "openai/ui": { preferredDisplayMode: "fullscreen", availableDisplayModes: ["inline", "fullscreen"] },
+            ui: { prefersBorder: false, csp: { connectDomains: ["https://*.blob.core.windows.net", "https://*.oaiusercontent.com", "https://word-in-gpt-mcp.callerinfo.workers.dev", "wss://word-in-gpt-mcp.callerinfo.workers.dev"], resourceDomains: [] } }
+          }
+        }]
+      })
+    );
+  }
   server.registerTool(
-    "open_word_document",
+    localFiles ? "open_word_document" : "open_word_resource",
     {
-      title: "Open in Word editor",
-      description: localFiles ? "Open a local .docx in the live Word editor. Set file.name to its filename and file.resourceUri to its absolute file:/// URL. Also accepts host-granted resource URIs." : "Opens a .docx file in the Word editor using the host-granted resource URI.",
+      title: localFiles ? "Open local DOCX in Word in Chat" : "Open host DOCX in Word in Chat",
+      description: localFiles ? "Open a local .docx in the live Word editor. Set file.name to its filename and file.resourceUri to its absolute file:/// URL. Also accepts host-granted resource URIs." : "Open a DOCX supplied by a desktop host using its granted resource URI. For ChatGPT uploaded attachments, including reopening one, use open_word_document with the original attachment's file parameters.",
       inputSchema: fileEntrypointInput,
-      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       _meta: {
         ui: { resourceUri: EDITOR_URI },
-        "openai/ui": { entrypoints: [{ type: "file", extensions: [".docx"] }], preferredModelDisplayMode: "fullscreen" }
+        "openai/ui": { entrypoints: [{ type: "file", extensions: ["docx"] }], preferredModelDisplayMode: "fullscreen" }
       }
     },
     async ({ file: file2 }) => {
-      let editorSessionId;
+      if (file2.resourceUri.startsWith("word-upload://")) throw new Error("Reopen the uploaded attachment with open_word_document and its original ChatGPT file parameters.");
       if (file2.resourceUri.startsWith("file:")) {
-        if (!localFiles) throw new Error("Local file URLs require the locally installed Word plugin.");
+        if (!localFiles) throw new Error("Local file URLs require the locally installed Word in Chat plugin.");
         file2 = await localFiles.open(file2.resourceUri);
-        editorSessionId = sessions.connect();
       }
+      const editorSessionId = sessions.connect();
       return {
         content: [{
           type: "text",
-          text: `Opening ${file2.name} in Word. ${editorSessionId ? `Use editorSessionId ${editorSessionId} with the word_document_* tools.` : "Use the editorSessionId from the editor's model context."} The panel shows Chat connected when ready.`
+          text: `Opening ${file2.name} in Word in Chat. Editor loading is pending. Use editorSessionId ${editorSessionId} with the word_document_* tools. Confirm opening only after word_document_inspect returns the document content. The panel shows Chat connected when ready.`
         }],
-        structuredContent: { file: file2, ...editorSessionId ? { editorSessionId } : {} }
+        structuredContent: { file: file2, editorSessionId }
       };
     }
   );
+  if (!localFiles) {
+    server.registerTool("word_attachment_read", {
+      description: "Provide an authorized attachment download for the editor when its direct browser download fails. Returns the download in private metadata.",
+      inputSchema: { downloadUrl: external_exports.string().url() },
+      _meta: appOnly,
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
+    }, async ({ downloadUrl }) => {
+      if (!isOpenAIFileUrl(downloadUrl)) throw new Error("Use the download URL supplied by ChatGPT.");
+      if (attachmentDownloadUrl) return { ...result({}), _meta: { fileDownloadUrl: attachmentDownloadUrl(downloadUrl) } };
+      const response = await fetchOpenAIFile(downloadUrl);
+      if (!response.ok) throw new Error("The uploaded file could not be read. Attach the DOCX again and retry.");
+      const blob = Buffer.from(await response.arrayBuffer()).toString("base64");
+      return { ...result({}), _meta: { fileBlob: blob } };
+    });
+    server.registerTool("open_word_document", {
+      title: "Open uploaded DOCX in Word in Chat",
+      description: "Open an uploaded DOCX in Word in Chat. Pass the file supplied by ChatGPT. Use the editorSessionId returned by this tool for document tools. Confirm opening by inspecting the document. Edits stay in the editor; choose Download DOCX to export an edited copy.",
+      inputSchema: uploadedFileInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      _meta: {
+        ui: { resourceUri: EDITOR_URI },
+        "openai/fileParams": ["file"],
+        "openai/ui": { preferredModelDisplayMode: "fullscreen" }
+      }
+    }, async ({ file: file2 }) => {
+      if (new URL(file2.download_url).protocol !== "https:") throw new Error("Use the HTTPS download URL supplied by ChatGPT.");
+      const opened = { name: file2.file_name ?? "document.docx", resourceUri: `word-upload://${file2.file_id}` };
+      const editorSessionId = sessions.connect();
+      return {
+        ...result({ file: opened, editorSessionId }),
+        _meta: { fileDownloadUrl: file2.download_url },
+        content: [{ type: "text", text: `Opening ${opened.name}. Editor loading is pending. Use editorSessionId ${editorSessionId} with the word_document_* tools. Confirm opening only after word_document_inspect returns the document content. Download DOCX exports the edited copy.` }]
+      };
+    });
+  }
   return server;
 }
 

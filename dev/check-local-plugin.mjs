@@ -33,7 +33,9 @@ try {
   }
 
   const { tools } = await client.listTools();
-  assert.equal(tools.filter(tool => tool.name.startsWith("word_document_")).length, 5);
+  assert.ok(tools.some(tool => tool.name === "word_document_insert_text"));
+  assert.ok(tools.some(tool => tool.name === "word_document_format_paragraph"));
+  assert.equal(new Set(tools.map(tool => tool.title ?? tool.name)).size, tools.length);
   for (const tool of tools) {
     for (const key of ["readOnlyHint", "destructiveHint", "openWorldHint"]) {
       assert.equal(typeof tool.annotations?.[key], "boolean", `${tool.name}: ${key}`);
@@ -54,9 +56,8 @@ try {
   async function documentCall(name, args) {
     const pending = client.callTool({ name, arguments: { editorSessionId, ...args } });
     const { command } = await call("word_editor_poll", { editorSessionId });
-    assert.equal(command.name, name);
-    assert.deepEqual(command.arguments, args);
-    const result = await doc.tools().find(tool => tool.name === name).execute(command.arguments);
+    assert.equal(command.name, name === "word_document_insert_text" ? "word_document_edit" : name);
+    const result = await doc.tools().find(tool => tool.name === command.name).execute(command.arguments);
     await call("word_editor_reply", { editorSessionId, commandId: command.id,
       result: { content: [{ type: "text", text: JSON.stringify(result) }] },
     });
@@ -70,10 +71,10 @@ try {
   assert.deepEqual(paragraphs.map(block => block.text), ["Quarterly review", "Revenue increased this quarter."]);
   await documentCall("word_document_capabilities", { kind: "insertText" });
   const first = paragraphs.find(block => block.text.trim());
-  await documentCall("word_document_edit", { revision: context.revision, operations: [{
-    kind: "insertText", at: { blockRef: first.ref, runRef: first.runs[0].ref, offset: 0 },
+  await documentCall("word_document_insert_text", { revision: context.revision,
+    at: { blockRef: first.ref, runRef: first.runs[0].ref, offset: 0 },
     text: "[Review passed] ",
-  }] });
+  });
   const saved = await call("word_local_write", {
     uri: opened.file.resourceUri, blob: Buffer.from(doc.save()).toString("base64"), ifMatch: snapshot.etag,
   });
@@ -89,7 +90,7 @@ try {
   assert.equal(conflict.outcome, "conflict");
   assert.deepEqual(await readFile(fixture), original);
   await call("word_editor_disconnect", { editorSessionId });
-  console.log("Local package passed: isolated startup, five document tools, annotations, UI resource, file launch, session routing, edit, saved DOCX, conflict detection, and unchanged fixture. Native panel verification remains separate.");
+  console.log("Local package passed: isolated startup, individual edit tools, unique names and titles, annotations, UI resource, file launch, session routing, edit, saved DOCX, conflict detection, and unchanged fixture. Native panel verification remains separate.");
 } finally {
   await client.close();
   await rm(temporary, { recursive: true, force: true });

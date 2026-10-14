@@ -1,5 +1,47 @@
 # Publication preparation
 
+## Current package — October 8, 2026
+
+The current ZIP is `word-in-chat-0.1.4.zip`; `submission-draft.zip` contains the
+same package. Its manifest declares version 0.1.4. The nine packaged files are
+the manifest, remote MCP configuration, icon, review fixture, and two skills
+with their references. Internal README files and validation notes are excluded.
+
+The live Cloudflare endpoint serves editor-v18 with WebSocket command delivery,
+hibernation, reconnection, direct authorized attachment downloads, and an HTTP
+streaming fallback. Thirty-four tests, typechecking, the local package check,
+and live WebSocket DOCX editing, export, routing isolation, 100-second idle
+survival, and reconnection checks pass. Deployment evidence is in
+`../deploy/README.md`. The public portal draft has not been changed by this
+update; its saved MCP scan must include the current editor reference and CSP.
+Actual ChatGPT web/mobile WebSocket host checks remain pending.
+
+## Previous status — October 7, 2026
+
+Version 0.1.1 received Changes required in the portal. The rejection says one or more submitted test cases produced incorrect results on ChatGPT web or mobile. The portal provides no failed-case transcript. The verified Developer identity is Alex Pickett; the skills show Checks passed.
+
+Version 0.1.2 fixes a concrete compatibility problem: the hosted opener previously required a desktop resource URI. It now accepts ChatGPT's standard uploaded-file descriptor. The selected DOCX downloads through the Worker and reaches the editor in private tool metadata. Edits remain in the browser copy, and Download DOCX exports them through ChatGPT's file API. Host-managed files retain autosave. The loading guard now clears after opening, so later documents can open.
+
+The MCP Worker is deployed as `d4fcea13-d6c0-4142-9406-e97ba0154ce2`. The website and privacy updates are deployed as `50424144-1139-405b-9e5d-1e87d7527fd4`. Live pages match their source. The synthetic fixture is public at https://word-in-gpt-mcp.callerinfo.workers.dev/review.docx.
+
+Seventeen automated tests, TypeScript checking, the build, isolated local-plugin checks, and live HTTPS routing checks pass. The actual editor passes reading, searching, text rewriting, heading centering, and export tests in a browser host with no desktop resource capability. Its layout also passes at 390 × 844 pixels.
+
+ChatGPT web testing uses a private custom MCP connection to the deployed endpoint. The uploaded fixture opens with Chat connected; summary, Revenue search, wording replacement, and centering return the expected results. The actual downloaded DOCX has Revenue grew this quarter., centered Heading1, and preserved run formatting. The email request asks for the recipient and exported copy; the purchasing request explains that purchasing needs another workflow. The Drive request uses the separately connected Google Drive plugin. Boundary expectations now allow other connected services while keeping Word in Chat scoped to document operations.
+
+The five positive cases returned the expected results in two fresh-document web runs. The second run exposed a closed editing connection after the edits completed. The current build adds automatic reconnection and closes the previous file's session when another file opens. Its regression checks, including the actual deployed Cloudflare relay through a localhost host proxy, verify that reconnection preserves edited text and centered formatting. The complete 0.1.2 ZIP imported with one MCP and two skills; OpenAI marks this private import Desktop only. It cannot provide the real mobile test route. Final fresh-install reconnection, skill activation, and real ChatGPT mobile verification remain pending. A phone-sized browser checks responsive layout only. The private custom MCP connection exercises the hosted runtime; final public ZIP skills and saved-version portal checks still need verification. The existing Drive recording shows the native desktop pleading demo; it does not show the new attachment and export path. No replacement upload, resubmission, or GitHub push has occurred.
+
+Real iPhone Safari testing reached the direct MCP opener. User screenshots showed a missing UI template, a rendered editor with a tools/call timeout, and an empty editor after reopening without attachment bytes. The deployed editor-v13 serves prior template URIs, recovers closed/timed-out relay sessions, keeps mobile buttons in a separate row with fixed-height statuses, and restores original attachment bytes from ChatGPT persisted tool metadata or its authorized file API. The desktop resource opener rejects temporary upload handles and directs the model to the original attachment parameters. Opening tool output now says loading is pending and requires a successful document inspection before claiming completion. A full browser reload with omitted private bytes passed in the development host. These fixes still need the real phone review cases; edited browser copies must be downloaded to retain their edits.
+
+Editor-v13 also keeps the opening session ID across timeout and inactivity recovery. A forced disconnect passed with model-context forwarding disabled, preserving edited contents. Mobile Select text enables touch dragging through the existing document selection handler; synthetic touch selection and Add to chat passed at phone width. Physical iPhone gesture and model context delivery remain pending.
+
+A later iPhone screenshot shows the correct fixture and Chat connected, while ChatGPT says the editor session ID is unavailable. Both opening tools now return the shared session ID directly to the model, and the panel joins that exact session. A real editor test against Cloudflare passed read, search, rewrite, center, and same-file reopening while the host deliberately omitted forwarding editor context to the model. Eighteen tests, TypeScript, build, isolated local package, and live HTTP checks pass. The public 0.1.2 candidate ZIP was rebuilt with the shared-session instructions and opening/inspection review expectation. Actual mobile completion remains pending after these changes.
+
+Use the v0.1.2 candidate ZIP for testing. Complete the real mobile cases and saved-version checks before resubmitting. Full evidence is recorded in `draft-validation.json`.
+
+## Historical preparation ledger
+
+The notes below describe earlier versions and preserve their evidence. The current status above supersedes their pending-item lists.
+
 This directory contains draft public listing and review metadata. The user selected Cloudflare hosting alongside WordInWeb for the standard public submission route. Deployment preparation is in `../deploy/README.md`. The installable local plugin remains in `../plugin/`.
 
 ## Current evidence
@@ -77,3 +119,33 @@ Deployed the prepared product, support, privacy, and terms pages to the existing
 ## Privacy finalization and recording stage — October 1, 2026
 
 The publisher confirmed support emails are kept. The privacy page now says they remain in the mailbox until deleted, and its draft label is removed. The revised page was deployed and its live contents verified. A clean recording document was copied to `dev/recording-review.docx` and opened in the native Word panel with Saved and Chat connected. The panel still showed the older selection button label; restart Codex and verify the updated Add to chat UI before rehearsal and recording. No video has been recorded.
+
+## Shared demo recording — October 2, 2026
+
+The publisher supplied a Google Drive link to demo.mp4. Signed-out browser playback passed; the player reports 1 minute 24 seconds. The video shows the California pleading demo. The verified link is recorded in `plugin.json` as `review.demo_recording_url` and included in the rebuilt `submission-draft.zip`. The recording stays on Google Drive. Country targeting, the exact verified portal identity, and saved public-version review cases and portal checks remain pending. This update supersedes earlier notes that recording and hosting were pending.
+
+## Country targeting — October 2, 2026
+
+The publisher selected all countries supported by the directory. `publication.countries` is explicitly an empty list, which removes country restrictions. The rebuilt archive contains this confirmed targeting. The exact verified identity and saved-version connection, review cases, scans, and developer attestations remain portal work.
+
+## Word in Chat name and portal handoff — October 2, 2026
+
+The publisher selected Word in Chat, with the subtitle View and edit DOCX files. The public ZIP and local source manifest use that name; the technical identity remains word-in-gpt. Build, TypeScript, ZIP inventory/metadata, and Agent Plugins schema checks passed. The hosted MCP now reports Word in Chat (Worker a1ad5faa-e874-4fd3-b75b-5468c61ed2ff), and its transport check passed. The four live website pages match the renamed source (website Worker e3fafe19-e91a-42f2-86e0-a335e832727f). An unrelated fixture and .DS_Store copied by the website build were removed from the generated deployment; their live URLs returned 404. Source files were preserved. The installed local runtime has not been reinstalled for this display-name change.
+
+The submission portal is open at https://platform.openai.com/plugins and requires sign-in. Draft upload, exact verified identity selection, connection/domain setup, automated scans, saved-version review cases, and developer attestations remain pending. No portal upload or review submission has occurred. The Drive video URL remains in the local submission metadata; these changes have not been pushed to the public repository.
+
+## Individual identity selector issue — October 2, 2026
+
+After sign-in, the Personal organization settings show Individual verification Approved and Business Tangia preverified for app submission. The plugin upload selector offers only Business — Tangia, including after one page refresh. Official app-review guidance explicitly supports individual verification for publishing under a personal name. This appears to be a portal identity-availability issue; its internal cause is unverified. No ZIP was uploaded under the business identity. A support request draft is saved in individual-identity-support.txt and has not been sent.
+
+## Browser network diagnosis — October 2, 2026
+
+The publisher authorized computer-use diagnosis. Chrome DevTools confirmed GET https://api.openai.com/v1/dashapi/plugins/identities returned HTTP 200 with exactly one entry: display_name Tangia, entity_type business. Thus the response is populated but omits the approved individual identity. The referenced community discussions supply diagnostics and Support escalation, not a demonstrated client-side workaround. The internal synchronization cause remains unverified. A screenshot, diagnostic JSON with organization/project context, and a support message were saved outside the repository in the Desktop folder Word in Chat identity diagnostics. They have not been sent. Request ID was not captured. No upload or publisher switch occurred.
+
+Direct individual upload was attempted through the portal API on October 2, 2026. OpenAI returned `status=invalid` with `developer_identity_unavailable`: "No verified individual identity is available for this organization." No plugin or submission was created. The request ID and timestamp are in the private Desktop diagnostics folder.
+
+## Narrowed skill scope — October 6, 2026
+
+Prepared local version 0.1.1 with skill descriptions and instructions scoped to the DOCX open in Word in Chat. Removed the invitation bridge, offline and collaboration sessions, headless creation guidance, and unsupported compose/save/asset tool documentation. Preserved the current editor tools and runtime. The updated submission-draft.zip passed manifest and MCP schema validation, ZIP integrity, relative-reference checks, source/archive consistency, and checks for removed workflows. The previous ZIP is preserved as submission-0.1.0.zip.
+
+The user screenshot shows the existing portal version In review, with a configured MCP and verified domain. All tools show Not live; capabilities and edit have further-review findings. The user requested preserving the active review. No portal change or replacement upload was made. Keep the corrected ZIP for a later upload.

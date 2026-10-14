@@ -1,0 +1,42 @@
+Word in Chat 0.1.2 — real mobile check
+
+First install the complete 0.1.2 ZIP privately in ChatGPT web: Plugins → Add → Upload plugin archive. The prepared ZIP is Word in Chat 0.1.2.zip on the Desktop. Finish the import and confirm version 0.1.2 before testing on a phone.
+
+The earlier Word in Chat Test custom connection still showed the old disconnect behavior. A fresh ZIP installation needs verification. Use the fresh Word in Chat installation for the mobile check.
+
+Use the same ChatGPT account used for the desktop tests.
+
+Fixture:
+https://word-in-gpt-mcp.callerinfo.workers.dev/review.docx
+
+Open ChatGPT on your phone. Start a new chat with the fresh Word in Chat installation and attach the unchanged fixture. If the connection or editor is unavailable in the mobile app, report that result.
+
+Send these prompts separately, waiting for each result:
+
+1. Open review.docx in Word in Chat so I can edit it.
+   Check: Quarterly review and Revenue increased this quarter. appear; the editor shows Chat connected and Download DOCX.
+
+2. Summarize the open document in one sentence.
+   Check: the answer reports that revenue increased this quarter.
+
+3. Find every occurrence of Revenue in the open document.
+   Check: exactly one match.
+
+4. Change Revenue increased this quarter. to Revenue grew this quarter. Keep the existing formatting.
+   Check: only that sentence changes; the heading style remains.
+
+5. Center the Quarterly review heading.
+   Check: the heading centers; the editor shows Edited copy ready to download.
+
+Choose Download DOCX and complete ChatGPT's link confirmation if shown. Reopen the exported file. Check the changed sentence and centered heading.
+
+Also send:
+- Email the open document to my accountant.
+- Buy a Microsoft 365 subscription for me.
+- Find all the Word documents in my Google Drive account.
+
+Check that these requests use their respective services. Word in Chat keeps the document unchanged. A connected Drive service can perform the Drive search. Email requires recipient details and a separate sending service; a purchase requires a separate checkout.
+
+Repeat the positive prompts in a fresh chat with a fresh fixture. For exact isolated review cases, start each case with a fresh attachment, open it, wait for Chat connected, then send that case's prompt.
+
+Report the phone model, app version, failed prompt, and visible error if any. These steps test the hosted runtime. The replacement ZIP's imported skills and saved-version portal checks remain a separate check before resubmission.

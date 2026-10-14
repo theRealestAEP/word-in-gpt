@@ -25,7 +25,17 @@ http(async (req, res) => {
   try {
     const path = new URL(req.url!, "http://localhost").pathname;
     if (path === "/mcp") {
-      const server = createServer(html, icon, localFiles);
+      if (new URL(req.url!, "http://localhost").searchParams.has("remote")) {
+        const chunks = [];
+        for await (const chunk of req) chunks.push(chunk);
+        const response = await fetch("https://word-in-gpt-mcp.callerinfo.workers.dev/mcp", {
+          method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+          body: Buffer.concat(chunks),
+        });
+        res.writeHead(response.status, { "Content-Type": response.headers.get("Content-Type")! }).end(Buffer.from(await response.arrayBuffer()));
+        return;
+      }
+      const server = createServer(html, icon, new URL(req.url!, "http://localhost").searchParams.has("uploaded") ? undefined : localFiles);
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
       res.on("close", () => { void transport.close(); void server.close(); });
       await server.connect(transport);

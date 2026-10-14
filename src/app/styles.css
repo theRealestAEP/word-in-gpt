@@ -39,13 +39,53 @@ body {
 
 .document-status {
   grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: 18px 18px;
+  line-height: 18px;
 }
 
-.save-status {
-  min-width: 15ch;
+.document-status > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.document-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.touch-select {
+  display: none;
+  font: inherit;
+  padding: 5px 10px;
+  border: 1px solid var(--color-border-primary, #dadce0);
+  border-radius: 6px;
+  color: inherit;
+  background: transparent;
+  width: 105px;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+
+.touch-select[aria-pressed="true"] {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-color: #1d4ed8;
+}
+
+@media (pointer: coarse) {
+  .touch-select { display: block; }
+}
+
+.document.touch-selecting { touch-action: none; }
+
+@media (max-width: 540px) {
+  .document-actions {
+    grid-column: 1 / -1;
+  }
+  .touch-select { display: block; }
 }
 
 .conflict {
@@ -82,6 +122,16 @@ body {
 }
 
 .share-selection:disabled { opacity: .5; cursor: default; }
+
+.download-docx {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--color-border-primary, #dadce0);
+  border-radius: 6px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
 
 .add-to-chat-menu-item {
   display: block;

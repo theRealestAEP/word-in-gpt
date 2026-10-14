@@ -10,7 +10,7 @@ button{font:inherit;font-weight:600;color:#1d4ed8;background:white;border:1px so
 iframe{width:100%;flex:1;min-height:0;border:0}
 </style></head>
 <body>
-<header><details><summary>Local editor demo · changes stay in memory</summary><div class="diagnostics"><button id="test">Test live editing</button><output id="result">Ready to test tool discovery, editing, and autosave.</output></div><pre id="model-context" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></details></header>
+<header><details><summary>Local editor demo · changes stay in memory</summary><div class="diagnostics"><button id="test">Test live editing</button><button id="test-touch">Test touch selection</button><output id="result">Ready to test tool discovery, editing, and autosave.</output></div><pre id="model-context" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></details></header>
 <iframe id="app" src="../plugin/dist/app.html"></iframe>
 <script>
 // Mock of the ChatGPT desktop host side of the MCP Apps + OpenAI file-entrypoint protocol.
@@ -18,12 +18,27 @@ const frame = document.getElementById("app");
 const uri = "host-resource://test-docx";
 const saveToDisk = new URLSearchParams(location.search).get("save") === "1";
 const localLauncher = new URLSearchParams(location.search).get("local") === "1";
+const uploaded = new URLSearchParams(location.search).has("uploaded");
+const restored = new URLSearchParams(location.search).has("restored");
+const forwardContext = !new URLSearchParams(location.search).has("no-context");
+const remote = new URLSearchParams(location.search).has("remote");
 if (saveToDisk) document.querySelector("summary").textContent = "Integration test · saves dev/integration-live.docx";
 let editorSessionId;
+let editorConnections = 0;
+const interruptEditor = async () => {
+  const count = editorConnections;
+  await mcp("tools/call", { name: "word_editor_disconnect", arguments: { editorSessionId } });
+  const deadline = Date.now() + 5000;
+  while (editorConnections === count && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+  if (editorConnections === count) throw new Error("The editor did not reconnect.");
+};
 const mcp = async (method, params) => {
-  const response = await fetch("/mcp", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: nextId++, method, params }) });
+  const response = await fetch(remote ? "/mcp?remote=1" : uploaded ? "/mcp?uploaded=1" : "/mcp", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: nextId++, method, params }) });
   const message = await response.json();
   if (message.error) throw new Error(message.error.message);
+  if (method === "tools/call" && params.name === "open_word_document" && message.result.structuredContent?.editorSessionId) {
+    editorSessionId = message.result.structuredContent.editorSessionId;
+  }
   return message.result;
 };
 const log = (window.hostLog = []);
@@ -54,17 +69,66 @@ document.getElementById("test").onclick = async () => {
   };
   try {
     if (!editorSessionId) throw new Error("The editor has not connected its server tools.");
+    if (uploaded) {
+      const context = await callTool("word_document_inspect", { kind: "context" });
+      const blocks = context.contents[0].blocks;
+      if (blocks.map(b => b.text).join("|") !== "Quarterly review|Revenue increased this quarter.") throw new Error("Fixture text differs from the review case.");
+      const search = await callTool("word_document_inspect", { kind: "search", query: "Revenue" });
+      if (search.matches.length !== 1) throw new Error("Search returned the wrong match count.");
+      const projection = await callTool("word_document_project", { story: "body", mode: "text" });
+      await callTool("word_document_patch", { story: "body", mode: "text", revision: projection.revision,
+        edits: [{ startLine: 2, endLine: 2, newText: "Revenue grew this quarter." }] });
+      await callTool("word_document_capabilities", { kind: "formatParagraph" });
+      const fresh = await callTool("word_document_inspect", { kind: "context" });
+      await callTool("word_document_format_paragraph", { revision: fresh.revision, blockRef: fresh.contents[0].blocks[0].ref, align: "center" });
+      const read = await callTool("word_document_inspect", { kind: "read", story: "body" });
+      if (read.blocks[0].alignment !== "center" || read.blocks[0].styleId !== "Heading1" || read.blocks[1].text !== "Revenue grew this quarter.") throw new Error("Final formatting or text differs from the review cases.");
+      if (!forwardContext) {
+        const previousId = editorSessionId;
+        const reopened = await mcp("tools/call", { name: "open_word_document", arguments: { file: {
+          download_url: "https://word-in-gpt-mcp.callerinfo.workers.dev/review.docx", file_id: "file_review", file_name: "review.docx",
+        } } });
+        send({ method: "ui/notifications/tool-result", params: reopened });
+        if (editorSessionId === previousId) throw new Error("Reopening did not supply a new shared session.");
+        const rebound = await callTool("word_document_inspect", { kind: "read", story: "body" });
+        if (rebound.blocks[0].alignment !== "center" || rebound.blocks[1].text !== "Revenue grew this quarter.") throw new Error("Reopening changed the edited copy.");
+        const sharedId = editorSessionId;
+        await interruptEditor();
+        const resumed = await callTool("word_document_inspect", { kind: "read", story: "body" });
+        if (editorSessionId !== sharedId || resumed.blocks[1].text !== "Revenue grew this quarter.") throw new Error("Reconnection lost the model's original reference or edits.");
+        output.textContent = "Passed: read, search, wording edits, centering, reopening, and reconnection with the same reference. Model context forwarding was disabled.";
+        return;
+      }
+      const interruptedSessionId = editorSessionId;
+      await interruptEditor();
+      const reconnected = await callTool("word_document_inspect", { kind: "read", story: "body" });
+      if (editorSessionId !== interruptedSessionId) throw new Error("Reconnection changed the model's reference.");
+      if (reconnected.blocks[1].text !== "Revenue grew this quarter." || reconnected.blocks[0].alignment !== "center") throw new Error("Reconnection changed the open document.");
+      const previousSessionId = editorSessionId;
+      const nextFile = { download_url: "https://word-in-gpt-mcp.callerinfo.workers.dev/review.docx", file_id: "file_review_next", file_name: "review-again.docx" };
+      const opened = await mcp("tools/call", { name: "open_word_document", arguments: { file: nextFile } });
+      send({ method: "ui/notifications/tool-result", params: opened });
+      const deadline = Date.now() + 5000;
+      while (editorSessionId === previousSessionId && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 50));
+      if (editorSessionId === previousSessionId) throw new Error("Opening another file did not create its own editor session.");
+      const closed = await mcp("tools/call", { name: "word_document_inspect", arguments: { kind: "context", editorSessionId: previousSessionId } });
+      if (!closed.isError) throw new Error("The previous file's session still accepts commands.");
+      const reopened = await callTool("word_document_inspect", { kind: "context" });
+      if (reopened.contents[0].blocks[1].text !== "Revenue increased this quarter.") throw new Error("The second upload inherited the first file's edits.");
+      output.textContent = "Passed: uploaded DOCX opened without desktop resources; read, search, wording patch, heading alignment, and retained heading style verified through MCP. A second file opened with its own session and closed the previous one. The open document reconnected after a forced server disconnect. Export and real ChatGPT tests remain separate.";
+      return;
+    }
     const discovery = await mcp("tools/list", {});
     const tools = discovery.tools.filter(tool => tool.name.startsWith("word_document_"));
-    if (!tools.some(tool => tool.name === "word_document_edit")) throw new Error("Editing tool was not advertised.");
+    if (!tools.some(tool => tool.name === "word_document_insert_text")) throw new Error("Insert text tool was not advertised.");
     await callTool("word_document_capabilities", { kind: "insertText" });
     const context = await callTool("word_document_inspect", { kind: "context" });
     const block = context.contents.find(story => story.story === "body").blocks.find(block => block.type === "paragraph" && block.text.trim());
     const marker = "[Live edit passed] ";
     const previousWrites = window.disk.writes;
-    await callTool("word_document_edit", { revision: context.revision, operations: [{
-      kind: "insertText", at: { blockRef: block.ref, runRef: block.runs[0].ref, offset: 0 }, text: marker,
-    }] });
+    await callTool("word_document_insert_text", { revision: context.revision,
+      at: { blockRef: block.ref, runRef: block.runs[0].ref, offset: 0 }, text: marker,
+    });
     const updated = await callTool("word_document_inspect", { kind: "context" });
     if (!updated.contents.some(story => story.blocks.some(block => block.text?.startsWith(marker)))) throw new Error("The edit was not visible to inspection.");
     const deadline = Date.now() + 5000;
@@ -77,20 +141,63 @@ document.getElementById("test").onclick = async () => {
     button.disabled = false;
   }
 };
+document.getElementById("test-touch").onclick = async () => {
+  const output = document.getElementById("result");
+  try {
+    const doc = frame.contentDocument;
+    const win = frame.contentWindow;
+    const mode = doc.querySelector(".touch-select");
+    if (mode.getAttribute("aria-pressed") !== "true") mode.click();
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    const text = [...doc.querySelectorAll('[data-dxw-item-kind="text"]')].find(el => el.textContent.startsWith("Revenue"));
+    const rect = text.getBoundingClientRect();
+    const last = [...doc.querySelectorAll('[data-dxw-item-kind="text"]')].find(el => el.textContent.endsWith("quarter."));
+    const endRect = last.getBoundingClientRect();
+    const heading = [...doc.querySelectorAll('[data-dxw-item-kind="text"]')].find(el => el.textContent.startsWith("Quarterly"));
+    const headingRect = heading.getBoundingClientRect();
+    const page = text.closest(".dxw-page");
+    const sentence = [...doc.querySelectorAll('[data-dxw-item-kind="text"]')].map(el => el.textContent).join("").split("review")[1];
+    const cases = [
+      { start: [rect.left - 6, rect.top + rect.height / 2], end: [endRect.right + 2, endRect.top + endRect.height / 2], expected: sentence, releaseOnly: true },
+      { start: [endRect.right + 2, endRect.top + endRect.height / 2], end: [headingRect.left - 4, headingRect.top + headingRect.height / 2], expected: "Quarterly review\n" + sentence },
+    ];
+    for (const test of cases) {
+      const touch = point => new win.Touch({ identifier: 1, target: page, clientX: point[0], clientY: point[1] });
+      const start = touch(test.start), end = touch(test.end);
+      for (const [type, touches, changedTouches] of [
+        ["touchstart", [start], [start]], ["touchmove", [end], [end]], ["touchend", [], [end]],
+      ]) {
+        if (type === "touchmove" && test.releaseOnly) continue;
+        page.dispatchEvent(new win.TouchEvent(type, { bubbles: true, cancelable: true, touches, changedTouches }));
+      }
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      const share = doc.querySelector(".share-selection");
+      if (share.disabled) throw new Error("Touch dragging did not create a document selection.");
+      share.click();
+      const expected = JSON.stringify(test.expected);
+      const deadline = Date.now() + 5000;
+      while (!document.getElementById("model-context").textContent.includes('"text":' + expected) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+      const context = document.getElementById("model-context").textContent;
+      if (!context.includes('"text":' + expected) || !context.includes('blockRef')) throw new Error("Add to chat lost the selected passage or its edit references.");
+    }
+    output.textContent = "Passed: touch dragging from page whitespace selects a full sentence and backwards across both paragraphs; Add to chat preserves each passage.";
+  } catch (error) { output.textContent = `Failed: ${error.message}`; }
+};
 const handlers = {
   "tools/call": async (p) => {
     const result = await mcp("tools/call", p);
+    if (p.name === "word_editor_connect" && !result.isError) editorConnections++;
     if (p.name === "word_local_write" && result.structuredContent?.outcome === "saved") window.disk.writes++;
     return result;
   },
   "ui/update-model-context": (p) => {
     const text = p.content.map(block => block.text ?? "").join(" ");
     document.getElementById("model-context").textContent = text;
-    editorSessionId = text.match(/editorSessionId ([a-f0-9-]+)/)?.[1];
+    if (forwardContext) editorSessionId = text.match(/editorSessionId ([a-f0-9-]+)/)?.[1];
     return {};
   },
   "ui/initialize": () => ({ protocolVersion: "2026-01-26", hostInfo: { name: "mock-host", version: "0" },
-    hostCapabilities: { experimental: { "openai/resource": {} } }, hostContext: {} }),
+    hostCapabilities: uploaded ? {} : { experimental: { "openai/resource": {} } }, hostContext: {} }),
   "resources/subscribe": () => ({}),
   "resources/read": async (p) => {
     const snapshot = saveToDisk ? await (await fetch("/document")).json() : { blob: bytesB64, etag: "v" + version };
@@ -120,6 +227,21 @@ window.addEventListener("message", async (e) => {
     try { send({ id: m.id, result: await h(m.params) }); }
     catch (error) { send({ id: m.id, error: { code: -32603, message: error.message } }); }
   } else if (m.method === "ui/notifications/initialized") {
+    if (uploaded) {
+      const file = { download_url: "https://word-in-gpt-mcp.callerinfo.workers.dev/review.docx", file_id: "file_review", file_name: "review.docx", mime_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" };
+      send({ method: "ui/notifications/tool-input", params: { arguments: { file } } });
+      const result = await mcp("tools/call", { name: "open_word_document", arguments: { file } });
+      if (restored) {
+        // Recreated panels can receive the file descriptor without the private bytes.
+        frame.contentWindow.openai = { getFileDownloadUrl: async ({ fileId }) => {
+          if (fileId !== file.file_id) throw new Error("File was not authorized for this panel.");
+          return { downloadUrl: file.download_url };
+        } };
+        delete result._meta;
+      }
+      send({ method: "ui/notifications/tool-result", params: result });
+      return;
+    }
     if (localLauncher) {
       const file = await (await fetch("/local-file")).json();
       send({ method: "ui/notifications/tool-input", params: { arguments: { file } } });
@@ -127,7 +249,10 @@ window.addEventListener("message", async (e) => {
       send({ method: "ui/notifications/tool-result", params: result });
       return;
     }
-    send({ method: "ui/notifications/tool-input", params: { arguments: { file: { name: saveToDisk ? "integration-live.docx" : "sample.docx", resourceUri: uri } } } });
+    const file = { name: saveToDisk ? "integration-live.docx" : "sample.docx", resourceUri: uri };
+    send({ method: "ui/notifications/tool-input", params: { arguments: { file } } });
+    const result = await mcp("tools/call", { name: "open_word_document", arguments: { file } });
+    send({ method: "ui/notifications/tool-result", params: result });
   } else if (!m.method && pending.has(m.id)) {
     const p = pending.get(m.id); pending.delete(m.id);
     m.error ? p.reject(new Error(m.error.message)) : p.resolve(m.result);
