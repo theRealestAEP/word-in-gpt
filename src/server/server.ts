@@ -132,7 +132,7 @@ export function createServer(editorHtml: string, iconSvg: string, localFiles?: L
           text: editorHtml,
           _meta: {
             "openai/ui": { preferredDisplayMode: "fullscreen", availableDisplayModes: ["inline", "fullscreen"] },
-            ui: { prefersBorder: false, csp: { connectDomains: ["https://*.blob.core.windows.net", "https://*.oaiusercontent.com", "https://word-in-gpt-mcp.callerinfo.workers.dev", "wss://word-in-gpt-mcp.callerinfo.workers.dev"], resourceDomains: [] } },
+            ui: { prefersBorder: false, csp: { connectDomains: ["https://word-in-gpt-mcp.callerinfo.workers.dev", "wss://word-in-gpt-mcp.callerinfo.workers.dev"], resourceDomains: [] } },
           },
         }],
       }),

@@ -176,3 +176,21 @@ it("launches an explicit local file and gives the UI and model the same session"
     await client.callTool({ name: "word_editor_disconnect", arguments: { editorSessionId } });
   } finally { await client.close(); await server.close(); }
 });
+
+it("lets the editor contact only its own server", async () => {
+  const server = createServer("<html>Word</html>", "<svg/>");
+  const client = new Client({ name: "csp-test", version: "1" });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(a), client.connect(b)]);
+  try {
+    const { resources } = await client.listResources();
+    for (const { uri } of resources) {
+      const { contents } = await client.readResource({ uri });
+      // OpenAI's review rejects broad CSP entries such as *.blob.core.windows.net.
+      expect(contents[0]._meta?.ui).toMatchObject({ csp: {
+        connectDomains: ["https://word-in-gpt-mcp.callerinfo.workers.dev", "wss://word-in-gpt-mcp.callerinfo.workers.dev"],
+        resourceDomains: [],
+      } });
+    }
+  } finally { await client.close(); await server.close(); }
+});

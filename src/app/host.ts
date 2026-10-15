@@ -39,6 +39,14 @@ type UploadToolResult = {
   content?: Array<{ text: string }>;
 };
 
+async function requestAttachment(downloadUrl: string): Promise<UploadToolResult> {
+  const result = await host.request<UploadToolResult>("tools/call", {
+    name: "word_attachment_read", arguments: { downloadUrl },
+  }, FILE_TIMEOUT_MS);
+  if (result.isError) throw new Error(result.content![0].text);
+  return result;
+}
+
 export function isHostFile(value: unknown): value is HostFile {
   const file = value as HostFile | undefined;
   return typeof file?.name === "string" && typeof file.resourceUri === "string";
@@ -79,12 +87,16 @@ export async function readFile(uri: string): Promise<FileSnapshot> {
     } catch {
       // Some hosts restrict browser downloads. Fetch through the server only then.
     }
-    const result = await host.request<UploadToolResult>("tools/call", {
-      name: "word_attachment_read", arguments: { downloadUrl },
-    }, FILE_TIMEOUT_MS);
-    if (result.isError) throw new Error(result.content![0].text);
+    // The editor's CSP allows only its own server, so in ChatGPT every attachment
+    // arrives here, and an expired link shows up as the relayed 401 or 403.
+    let result = await requestAttachment(downloadUrl);
     if (result._meta?.fileDownloadUrl) {
-      const response = await fetch(result._meta.fileDownloadUrl);
+      let response = await fetch(result._meta.fileDownloadUrl);
+      if ((response.status === 401 || response.status === 403) && openai?.getFileDownloadUrl) {
+        ({ downloadUrl } = await openai.getFileDownloadUrl({ fileId }));
+        result = await requestAttachment(downloadUrl);
+        response = await fetch(result._meta!.fileDownloadUrl!);
+      }
       if (!response.ok) throw new Error("The attachment could not be restored. Attach the DOCX again.");
       const snapshot = { bytes: new Uint8Array(await response.arrayBuffer()), etag: "0", writable: true };
       uploadedFiles.set(uri, snapshot);

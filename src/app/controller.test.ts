@@ -196,3 +196,26 @@ it("answers the model at once with the reason when an attachment cannot load", a
   await expect(controller.callTool("word_document_inspect", { kind: "context" }))
     .rejects.toThrow("The document could not be opened: The attachment could not be restored. Attach the DOCX again.");
 });
+
+it("renews an expired link when CSP sends every attachment through the server", async () => {
+  const original = await readFile(new URL("../../publication/fixtures/review.docx", import.meta.url));
+  const file = { name: "review.docx", resourceUri: "word-upload://review-csp-expired" };
+  receiveUpload(file, undefined, "https://oaisdmntprcentralus.blob.core.windows.net/expired.docx");
+  const getFileDownloadUrl = vi.fn().mockResolvedValue({ downloadUrl: "https://oaisdmntprcentralus.blob.core.windows.net/fresh.docx" });
+  vi.stubGlobal("window", { openai: { getFileDownloadUrl } });
+  const fetchFile = vi.fn()
+    .mockRejectedValueOnce(new TypeError("Failed to fetch")) // CSP blocks the direct download
+    .mockResolvedValueOnce(new Response("expired", { status: 403 })) // the proxy relays the expired link
+    .mockResolvedValueOnce(new Response(original));
+  vi.stubGlobal("fetch", fetchFile);
+  request
+    .mockResolvedValueOnce({ _meta: { fileDownloadUrl: "https://worker.example/attachments/old" } })
+    .mockResolvedValueOnce({ _meta: { fileDownloadUrl: "https://worker.example/attachments/new" } });
+  const controller = new EditorController();
+  await controller.open(file);
+  expect(request).toHaveBeenNthCalledWith(2, "tools/call", {
+    name: "word_attachment_read", arguments: { downloadUrl: "https://oaisdmntprcentralus.blob.core.windows.net/fresh.docx" },
+  }, 60_000);
+  expect(fetchFile).toHaveBeenLastCalledWith("https://worker.example/attachments/new");
+  expect((await readUploadedFile(file.resourceUri)).bytes).toEqual(new Uint8Array(original));
+});
