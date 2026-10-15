@@ -1,7 +1,7 @@
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { createServer, fetchOpenAIFile } from "./server.ts";
 import { EditorSessions } from "./editor-sessions.ts";
 import { recordUsage, type UsageEnv } from "./usage.ts";
+import { respondMcp } from "./tools-list.ts";
 import type { DurableObjectNamespace, DurableObjectState, ExecutionContext, Fetcher, KVNamespace, RateLimit, Request as WorkerRequest, WebSocket as WorkerWebSocket, WebSocketPair as WorkerWebSocketPair } from "@cloudflare/workers-types";
 import { z } from "zod";
 
@@ -97,16 +97,7 @@ export class WordEditorRelay {
       setTimeout(() => this.downloads.delete(token), 90_000).unref?.();
       return `${url.origin}/attachments/${token}`;
     }, id => `${url.protocol === "https:" ? "wss:" : "ws:"}//${url.host}/editor/${id}`);
-    const transport = new WebStandardStreamableHTTPServerTransport({
-      sessionIdGenerator: undefined,
-      enableJsonResponse: true,
-    });
-    try {
-      await server.connect(transport);
-      return await transport.handleRequest(request);
-    } finally {
-      await server.close();
-    }
+    return respondMcp(server, request);
   }
 }
 
@@ -117,6 +108,46 @@ async function withinRateLimit(request: Request, env: Env, path: string): Promis
   if (path === "/mcp") return (await env.MCP_LIMIT.limit({ key: ip })).success;
   const route = path.startsWith("/editor/") ? "editor" : "attachments";
   return (await env.BROWSER_LIMIT.limit({ key: `${route}:${ip}` })).success;
+}
+
+// Codex re-checks every connected MCP server about every 45 seconds per open app.
+// None of these requests touches an editor session, so the Worker answers them
+// and the single relay only handles tool calls, resource reads, and editors.
+const POLLING_METHODS = new Set(["initialize", "notifications/initialized", "ping", "tools/list"]);
+let toolsList: Promise<string> | undefined;
+let icon: Promise<string> | undefined;
+
+/** Answer a polling request in the Worker, or return null to send it to the relay. */
+async function answerPolling(request: Request, env: Env): Promise<Response | null> {
+  if (request.method !== "GET" && request.method !== "POST") return null;
+  let method: unknown = "GET";
+  let id: unknown;
+  if (request.method === "POST") {
+    ({ method, id } = await request.clone().json().catch(() => ({})) as { method?: unknown; id?: unknown });
+    if (typeof method !== "string" || !POLLING_METHODS.has(method)) return null;
+  }
+  if (method === "tools/list") {
+    // Built at deploy time (dev/prepare-worker-assets.mjs): converting every tool
+    // schema costs about 15 ms of CPU, too much to repeat for each poll.
+    toolsList ??= env.ASSETS.fetch("https://assets/tools-list.json").then(response => {
+      if (!response.ok) throw new Error(`tools-list.json: ${response.status}`);
+      return response.text();
+    });
+    const result = await toolsList.catch((error: unknown) => {
+      toolsList = undefined;
+      throw error;
+    });
+    return new Response(`{"result":${result},"jsonrpc":"2.0","id":${JSON.stringify(id)}}`, {
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  icon ??= env.ASSETS.fetch("https://assets/icon.svg").then(response => response.text());
+  const iconSvg = await icon.catch((error: unknown) => {
+    icon = undefined;
+    throw error;
+  });
+  // The editor HTML is only sent by resources/read, which the relay answers.
+  return respondMcp(createServer("", iconSvg), request);
 }
 
 const ERROR_RETENTION_SECONDS = 30 * 24 * 60 * 60;
@@ -156,6 +187,13 @@ export default {
       if (!allowed) return new Response("Too many requests\n", { status: 429, headers: { "Retry-After": "10" } });
       // Counting must never slow or fail a request, so it runs after the response.
       if (path === "/mcp") ctx.waitUntil(recordUsage(request, env).catch(() => {}));
+      if (path === "/mcp") {
+        const answered = await answerPolling(request, env).catch((error: unknown) => {
+          logRelayError(env, ctx, "polling", route, error);
+          return null;
+        });
+        if (answered) return answered;
+      }
       try {
         return await env.EDITOR_RELAY.get(env.EDITOR_RELAY.idFromName("word-editor-relay")).fetch(request as unknown as WorkerRequest);
       } catch (error) {

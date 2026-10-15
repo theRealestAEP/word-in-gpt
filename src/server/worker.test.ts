@@ -3,6 +3,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { afterEach, expect, it, vi } from "vitest";
 import worker, { WordEditorRelay } from "./worker.ts";
 import { fetchOpenAIFile } from "./server.ts";
+import { toolsListResult } from "./tools-list.ts";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
@@ -156,5 +157,52 @@ it("lets requests through when the rate limiter itself fails", async () => {
   const env = { MCP_LIMIT: broken, BROWSER_LIMIT: broken, ERROR_LOG: { put: vi.fn().mockResolvedValue(undefined) }, EDITOR_RELAY: { idFromName: () => "id", get: () => ({ fetch: relay }) } } as never;
   const response = await worker.fetch(new Request("https://worker.example/mcp", { method: "POST" }), env, { waitUntil: vi.fn() } as never);
   expect(response.status).toBe(200);
+  expect(relay).toHaveBeenCalledTimes(1);
+});
+
+function pollingEnv(assets: Record<string, string>) {
+  const relay = vi.fn().mockResolvedValue(new Response("relay"));
+  const allow = { limit: vi.fn().mockResolvedValue({ success: true }) };
+  const env = {
+    MCP_LIMIT: allow, BROWSER_LIMIT: allow, ERROR_LOG: { put: vi.fn().mockResolvedValue(undefined) },
+    USAGE: { writeDataPoint: vi.fn() }, USAGE_SALT: "",
+    ASSETS: { fetch: async (url: string) => url.split("/").pop()! in assets ? new Response(assets[url.split("/").pop()!]) : new Response(null, { status: 404 }) },
+    EDITOR_RELAY: { idFromName: () => "id", get: () => ({ fetch: relay }) },
+  } as never;
+  return { env, relay };
+}
+
+function rpc(method: string, id?: number) {
+  return new Request("https://worker.example/mcp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", "mcp-protocol-version": "2025-06-18" },
+    body: JSON.stringify({ jsonrpc: "2.0", ...(id === undefined ? {} : { id }), method, params: method === "initialize" ? { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "codex", version: "1" } } : {} }),
+  });
+}
+
+it("answers Codex's polling in the Worker with the same tool list the server builds", async () => {
+  const toolsList = await toolsListResult();
+  const { env, relay } = pollingEnv({ "tools-list.json": toolsList, "icon.svg": "<svg/>" });
+  const ctx = { waitUntil: vi.fn() } as never;
+  const listed = await worker.fetch(rpc("tools/list", 7), env, ctx);
+  expect(await listed.json()).toEqual({ jsonrpc: "2.0", id: 7, result: JSON.parse(toolsList) });
+  const initialized = await worker.fetch(rpc("initialize", 1), env, ctx);
+  expect(await initialized.json()).toMatchObject({ id: 1, result: { serverInfo: { name: "word-in-gpt" } } });
+  expect((await worker.fetch(rpc("notifications/initialized"), env, ctx)).status).toBe(202);
+  expect((await worker.fetch(new Request("https://worker.example/mcp", { headers: { Accept: "*/*" } }), env, ctx)).status).toBe(406);
+  expect(relay).not.toHaveBeenCalled();
+  // Tool calls need the editor session, so they still go to the relay.
+  await worker.fetch(rpc("tools/call", 2), env, ctx);
+  expect(relay).toHaveBeenCalledTimes(1);
+});
+
+it("sends tools/list to the relay when the built list is missing", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  const { env, relay } = pollingEnv({ "icon.svg": "<svg/>" });
+  // A fresh module: the built list is cached per Worker instance.
+  vi.resetModules();
+  const { default: freshWorker } = await import("./worker.ts");
+  const response = await freshWorker.fetch(rpc("tools/list", 3), env, { waitUntil: vi.fn() } as never);
+  expect(await response.text()).toBe("relay");
   expect(relay).toHaveBeenCalledTimes(1);
 });

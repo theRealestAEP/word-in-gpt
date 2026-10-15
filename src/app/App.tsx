@@ -131,6 +131,7 @@ function DocumentView({ doc, selecting, onEdit, onReady, onError, onSelection }:
   // wordinweb and @wordinweb/agent each bundle their own copy of DocxDocument.
   // The classes are the same code, but TypeScript treats their private fields as different types.
   const view = useAgentDocumentSession(binding as unknown as AgentDocumentViewBinding);
+  // Markup shows tracked insertions and deletions the way Word does; "final" would hide them.
   return <DocxView {...view} collab={{ ...view.collab!, setPresence: onSelection }} editable commentAuthor="You"
-    narrowWidth={1100} onReady={onReady} onError={onError} className={`document${selecting ? " touch-selecting" : ""}`} />;
+    revisions="markup" narrowWidth={1100} onReady={onReady} onError={onError} className={`document${selecting ? " touch-selecting" : ""}`} />;
 }
