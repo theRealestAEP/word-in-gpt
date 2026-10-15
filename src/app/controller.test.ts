@@ -179,3 +179,20 @@ it("runs the submitted heading-centering case and preserves text in the exported
   expect(reopened.blocks.map((block: any) => block.text)).toEqual(["Quarterly review", "Revenue increased this quarter."]);
   expect(reopened.blocks[0].styleId).toBe("Heading1");
 });
+
+it("answers the model at once with the reason when an attachment cannot load", async () => {
+  const file = { name: "review.docx", resourceUri: "word-upload://review-dead-link" };
+  receiveUpload(file, undefined, "https://oaisdmntprcentralus.blob.core.windows.net/expired.docx");
+  vi.stubGlobal("window", {});
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("expired", { status: 403 })));
+  request.mockResolvedValueOnce({ _meta: { fileDownloadUrl: "https://worker.example/attachments/token" } });
+  const controller = new EditorController();
+  await expect(controller.open(file)).rejects.toThrow("Attach the DOCX again");
+  await controller.connectChat("00000000-0000-4000-8000-000000000002");
+  expect(controller.state.connection).toBe("Document unavailable");
+  expect(request).toHaveBeenLastCalledWith("ui/update-model-context", {
+    content: [{ type: "text", text: expect.stringContaining("review.docx could not be opened: The attachment could not be restored. Attach the DOCX again.") }],
+  });
+  await expect(controller.callTool("word_document_inspect", { kind: "context" }))
+    .rejects.toThrow("The document could not be opened: The attachment could not be restored. Attach the DOCX again.");
+});

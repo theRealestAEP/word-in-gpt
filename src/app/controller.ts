@@ -41,6 +41,10 @@ export class EditorController {
   private saveQueue: Promise<void> = Promise.resolve();
   private nextId = 1;
   private editorContext = "";
+  // Why the open file failed to load. The editor still joins the chat session,
+  // so the model's next call fails at once with this reason instead of waiting
+  // for an editor that never connects.
+  private loadError: string | null = null;
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -52,6 +56,12 @@ export class EditorController {
   setConnection = (connection: string): void => { this.set({ connection }); };
 
   async connectChat(editorSessionId: string): Promise<void> {
+    if (this.loadError) {
+      this.editorContext = `Word editor: ${this.state.file?.name} could not be opened: ${this.loadError} Tell the user; the word_document_* tools cannot read it.`;
+      await this.updateModelContext();
+      this.setConnection("Document unavailable");
+      return;
+    }
     const save = isUploadedFile(this.state.file!.resourceUri)
       ? "This is an uploaded copy. Changes stay in this editor; Download DOCX exports an edited copy."
       : "Changes autosave through the host.";
@@ -77,18 +87,24 @@ export class EditorController {
 
   async open(file: HostFile): Promise<void> {
     if (this.state.doc && this.state.file?.resourceUri === file.resourceUri) return;
+    this.loadError = null;
     this.set({ file, doc: null, status: "Loading", connection: "Loading document…" });
     try {
       if (!file.resourceUri.startsWith("word-local://") && !isUploadedFile(file.resourceUri)) await host.request("resources/subscribe", { uri: file.resourceUri });
       this.show(await readFile(file.resourceUri));
     } catch (error) {
+      this.loadError = error instanceof Error ? error.message : String(error);
       this.setConnection("Document unavailable");
       throw error;
     }
   }
 
   async callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
-    if (!this.state.doc) throw new Error("No document is open. Ask the user to open a .docx file.");
+    if (!this.state.doc) {
+      throw new Error(this.loadError
+        ? `The document could not be opened: ${this.loadError}`
+        : "No document is open. Ask the user to open a .docx file.");
+    }
     return this.state.doc.callTool(name, args);
   }
 

@@ -39554,7 +39554,7 @@ function unzipSync(data, opts) {
   return files;
 }
 
-// node_modules/@wordinweb/agent/dist/chunk-RQ74KQML.js
+// node_modules/@wordinweb/agent/dist/chunk-QDZRRLHW.js
 var CFB = __toESM(require_cfb(), 1);
 var te2 = new TextEncoder();
 var td2 = new TextDecoder();
@@ -39951,6 +39951,9 @@ function serializeXml(el26, declaration = false) {
   write2(el26);
   return out.join("");
 }
+function isEmptyPlaceholder(e) {
+  return !!e.omitWhenEmpty && Object.keys(e.attrs).length === 0 && e.text.length === 0 && e.children.length === 1 && localName(e.children[0].name) === "t" && e.children[0].children.length === 0 && e.children[0].text.length === 0 && Object.keys(e.children[0].attrs).every((key) => key === "xml:space" && e.children[0].attrs[key] === "preserve");
+}
 function cloneXml(el26) {
   return {
     name: el26.name,
@@ -39993,6 +39996,12 @@ var Package = class _Package {
   static from(data) {
     return new _Package(data instanceof Uint8Array ? data : new Uint8Array(data));
   }
+  /** A package over an already-unzipped entry map (DocxDocument.clone). */
+  static fromFiles(files) {
+    const pkg = Object.create(_Package.prototype);
+    pkg.files = files;
+    return pkg;
+  }
   has(name) {
     return this.normalize(name) in this.files;
   }
@@ -40015,6 +40024,13 @@ var Package = class _Package {
     return name.startsWith("/") ? name.slice(1) : name;
   }
 };
+function relativePartPath(fromPart, toPart) {
+  const fromDir = fromPart.split("/").slice(0, -1);
+  const to = toPart.split("/");
+  let i2 = 0;
+  while (i2 < fromDir.length && i2 < to.length - 1 && fromDir[i2] === to[i2]) i2++;
+  return [...fromDir.slice(i2).map(() => ".."), ...to.slice(i2)].join("/");
+}
 function resolvePartPath(sourcePart, target) {
   if (target.startsWith("/")) return target.slice(1);
   const baseDir = sourcePart.includes("/") ? sourcePart.slice(0, sourcePart.lastIndexOf("/")) : "";
@@ -42207,6 +42223,11 @@ function parseParagraph(p, ctx) {
     }
   }
   ensureCaretAnchor(p, para);
+  if (ctx.revisionView === "markup" && pPr) {
+    const markRPr = child(pPr, "rPr");
+    if (markRPr && child(markRPr, "del")) para.markRevision = "del";
+    else if (markRPr && child(markRPr, "ins")) para.markRevision = "ins";
+  }
   return para;
 }
 function hasVisibleContent(c) {
@@ -46402,6 +46423,10 @@ var _DocxDocument = class _DocxDocument2 {
   /** The header part roots, in package order. A watermark is authored into
    * every one of them: Word paints it on every page, and a document with a
    * first-page or even-page header has more than one header part. */
+  /** The root of the header or footer part at `target`, if this document has one. */
+  headerFooterRoot(target) {
+    return this.hfParts.find((p) => p.target === target)?.root;
+  }
   headerRoots() {
     return this.hfParts.filter((p) => p.isHeader).map((p) => p.root);
   }
@@ -46560,6 +46585,22 @@ var _DocxDocument = class _DocxDocument2 {
     this.saveJournal = journal;
     try {
       return this.buildPackage();
+    } finally {
+      for (let i2 = journal.length - 1; i2 >= 0; i2--) journal[i2]();
+      this.saveJournal = null;
+    }
+  }
+  /**
+   * An independent copy: what `DocxDocument.load(doc.save())` gives, without
+   * zipping the package and unzipping it again. compareDocuments starts from a
+   * copy of the revised document, and the round trip through the zip was a
+   * third of its time on a document that had not changed at all.
+   */
+  clone() {
+    const journal = [];
+    this.saveJournal = journal;
+    try {
+      return new _DocxDocument2(Package.fromFiles(this.buildPackageFiles()));
     } finally {
       for (let i2 = journal.length - 1; i2 >= 0; i2--) journal[i2]();
       this.saveJournal = null;
@@ -46766,8 +46807,91 @@ var _DocxDocument = class _DocxDocument2 {
     return this.relsRoot;
   }
   /** Register an external hyperlink relationship and return its rId. */
-  addHyperlinkRel(url2) {
-    const rels = this.ensureRelsRoot();
+  /**
+   * Copy the part that `source`'s main-document relationship `relId` points
+   * at into this package, with every part it references in turn (a chart's
+   * embedded workbook, SmartArt's layout, style and colour parts) and their
+   * content types, and add a relationship to it. Returns the new
+   * relationship id, or null when the source has no such internal part.
+   *
+   * compareDocuments needs this for struck content: a removed picture keeps
+   * its w:drawing, and without its image part the result's reject-all
+   * brought the picture back as an empty frame.
+   */
+  adoptRelFrom(source, relId, scope = {}) {
+    const rel = source.relationshipsOf(scope.from).get(relId);
+    if (!rel || rel.external) return null;
+    const copied = /* @__PURE__ */ new Map();
+    const sameBytes = (path2, bytes) => {
+      const have = this.pkg.binary(path2);
+      return !!have && have.length === bytes.length && have.every((b, i2) => b === bytes[i2]);
+    };
+    const copyPart = (from) => {
+      const known = copied.get(from);
+      if (known) return known;
+      const bytes = source.pkg.binary(from);
+      if (!bytes) return null;
+      let to = from;
+      for (let n = 2; this.pkg.has(to) && !sameBytes(to, bytes); n++) to = from.replace(/(\.[^./]+)?$/, `-${n}$1`);
+      copied.set(from, to);
+      if (this.pkg.has(to)) return to;
+      this.pkg.raw()[to] = bytes;
+      this.adoptContentType(source, from, to);
+      const relsXml = source.pkg.text(relsPathFor(from));
+      if (relsXml) {
+        const root = parseXml(relsXml);
+        for (const r of root.children) {
+          if (r.attrs.TargetMode === "External" || !r.attrs.Target) continue;
+          const sub = copyPart(resolvePartPath(from, r.attrs.Target));
+          if (sub) r.attrs.Target = relativePartPath(to, sub);
+        }
+        this.pkg.raw()[relsPathFor(to)] = strToU8(serializeXml(root, true));
+      }
+      return to;
+    };
+    const part = copyPart(rel.target);
+    if (!part) return null;
+    const owner = this.relsOwnerOf(scope.into);
+    const rels = owner.relsRoot;
+    let maxId = 0;
+    for (const r of rels.children) {
+      const m = /^rId(\d+)$/.exec(r.attrs["Id"] ?? "");
+      if (m) maxId = Math.max(maxId, parseInt(m[1], 10));
+    }
+    const id = `rId${maxId + 1}`;
+    rels.children.push({
+      name: "Relationship",
+      attrs: { Id: id, Type: rel.type, Target: relativePartPath(owner.partPath, part) },
+      children: [],
+      text: ""
+    });
+    owner.relationships.set(id, { id, type: rel.type, target: part, external: false });
+    return id;
+  }
+  /** Give a part copied from `source` the content type it had there. */
+  adoptContentType(source, from, to) {
+    const types = this.contentTypesRoot;
+    const theirs = source.contentTypesRoot;
+    if (!types || !theirs) return;
+    const override = theirs.children.find((c) => localName(c.name) === "Override" && c.attrs.PartName === `/${from}`);
+    const prefixEnd = types.name.indexOf(":") + 1;
+    const prefix = prefixEnd > 0 ? types.name.slice(0, prefixEnd) : "";
+    if (override) {
+      if (!types.children.some((c) => localName(c.name) === "Override" && c.attrs.PartName === `/${to}`)) {
+        types.children.push({ name: `${prefix}Override`, attrs: { PartName: `/${to}`, ContentType: override.attrs.ContentType }, children: [], text: "" });
+      }
+      return;
+    }
+    const ext = from.slice(from.lastIndexOf(".") + 1).toLowerCase();
+    const byExt = (root) => root.children.find((c) => localName(c.name) === "Default" && c.attrs.Extension?.toLowerCase() === ext);
+    const fallback = byExt(theirs);
+    if (fallback && !byExt(types)) {
+      types.children.unshift({ name: `${prefix}Default`, attrs: { Extension: ext, ContentType: fallback.attrs.ContentType }, children: [], text: "" });
+    }
+  }
+  addHyperlinkRel(url2, ownerPart) {
+    const owner = this.relsOwnerOf(ownerPart);
+    const rels = owner.relsRoot;
     let maxId = 0;
     for (const r of rels.children) {
       const m = /^rId(\d+)$/.exec(r.attrs["Id"] ?? "");
@@ -46785,7 +46909,7 @@ var _DocxDocument = class _DocxDocument2 {
       children: [],
       text: ""
     });
-    this.documentRels.set(id, { id, type: "hyperlink", target: url2, external: true });
+    owner.relationships.set(id, { id, type: "hyperlink", target: url2, external: true });
     return id;
   }
   /** Retarget an existing external relationship (hyperlink href edit). */
@@ -46796,6 +46920,23 @@ var _DocxDocument = class _DocxDocument2 {
     const el26 = this.relsRoot?.children.find((r) => r.attrs["Id"] === relId);
     if (el26) el26.attrs["Target"] = url2;
     return true;
+  }
+  /** The relationships owned by `part` (a header or footer part), or by the
+   * document part when null; a header or footer gets a rels root on demand. */
+  relsOwnerOf(part) {
+    const owner = part ? this.hfParts.find((p) => p.target === part) : void 0;
+    if (!owner) return { relsRoot: this.ensureRelsRoot(), relationships: this.documentRels, partPath: this.docPart };
+    owner.relsRoot ?? (owner.relsRoot = {
+      name: "Relationships",
+      attrs: { xmlns: "http://schemas.openxmlformats.org/package/2006/relationships" },
+      children: [],
+      text: ""
+    });
+    return { relsRoot: owner.relsRoot, relationships: owner.rels, partPath: owner.target };
+  }
+  /** The relationships of `part` (a header or footer), or of the document part. */
+  relationshipsOf(part) {
+    return (part ? this.hfParts.find((p) => p.target === part)?.rels : void 0) ?? this.documentRels;
   }
   /** The relationships of the part that holds `source`: a header or footer
    * part when the element is inside one, else the document part. */
@@ -51276,6 +51417,20 @@ function buildAtoms(doc, para, measurer, fields, fallbackFamily, gridPitch) {
   for (const childEl of para.children) {
     if (childEl.type === "run") pushRun(childEl);
     else for (const r of childEl.runs) pushRun(r, childEl.href ?? (childEl.anchor ? "#" + childEl.anchor : void 0));
+  }
+  if (para.markRevision) {
+    const last = para.children.at(-1);
+    const lastRun = last?.type === "hyperlink" ? last.runs.at(-1) : last;
+    const deleted = para.markRevision === "del";
+    pushRun({
+      type: "run",
+      props: {
+        ...lastRun?.props ?? {},
+        color: deleted ? "#D93025" : "#188038",
+        ...deleted ? { strike: true } : { underline: "single" }
+      },
+      content: [{ kind: "text", text: "\xB6" }]
+    });
   }
   if (gridPitch) {
     for (let i2 = 0; i2 + 1 < atoms.length; i2++) {
@@ -56653,15 +56808,20 @@ var Engine = class {
       while (out.length < nCols) out.push(bw(fallback));
       return out;
     };
+    const colTopPads = (r) => {
+      const fallback = this.cellMarginsOf(tbl, false).top ?? 0;
+      return rows[r].cells.flatMap((c) => Array(Math.max(1, c.props.gridSpan)).fill(c.props.margins?.top ?? fallback));
+    };
     const boundary = (k) => {
       if (k === 0) return Math.max(0, ...colWidths(0, "top", tb?.top));
       if (k === rows.length)
         return Math.max(0, ...colWidths(rows.length - 1, "bottom", tb?.bottom));
       const above = colWidths(k - 1, "bottom", tb?.insideH);
       const below = colWidths(k, "top", tb?.insideH);
+      const topPads = colTopPads(k);
       const n = Math.max(above.length, below.length);
       let w = 0;
-      for (let i2 = 0; i2 < n; i2++) w = Math.max(w, Math.max(above[i2] ?? 0, below[i2] ?? 0));
+      for (let i2 = 0; i2 < n; i2++) w = Math.max(w, below[i2] ?? 0, (above[i2] ?? 0) - (topPads[i2] ?? 0));
       return w;
     };
     return { top: boundary(ri), bottom: boundary(ri + 1) };
@@ -58428,7 +58588,8 @@ function ensurePPrRPr(pEl) {
   let rPr = pPr.children.find((c) => localName(c.name) === "rPr");
   if (!rPr) {
     rPr = el2(`${w}rPr`);
-    pPr.children.push(rPr);
+    const at = pPr.children.findIndex((c) => localName(c.name) === "sectPr" || localName(c.name) === "pPrChange");
+    pPr.children.splice(at === -1 ? pPr.children.length : at, 0, rPr);
   }
   return rPr;
 }
@@ -58566,6 +58727,8 @@ function convertDelTextToText(el26) {
   const walk2 = (e) => {
     if (localName(e.name) === "delText") {
       e.name = e.name.replace(/delText$/, "t");
+    } else if (localName(e.name) === "delInstrText") {
+      e.name = e.name.replace(/delInstrText$/, "instrText");
     }
     for (const c of e.children) walk2(c);
   };
@@ -58587,7 +58750,7 @@ function removeEl(doc, el26) {
   parent.children.splice(idx, 1);
   return true;
 }
-var RUN_CONTAINERS = ["hyperlink", "smartTag", "dir", "bdo"];
+var RUN_CONTAINERS = ["hyperlink", "smartTag", "dir", "bdo", "fldSimple"];
 function removeRevisionAndEmptyHost(doc, el26) {
   const parent = doc.findParentOf(el26);
   if (!removeEl(doc, el26)) return false;
@@ -58596,26 +58759,57 @@ function removeRevisionAndEmptyHost(doc, el26) {
   }
   return true;
 }
-function joinWithNext(doc, pEl) {
+function joinWithNext(doc, pEl, gone) {
   const parent = doc.findParentOf(pEl);
   if (!parent) return false;
   const idx = parent.children.indexOf(pEl);
-  const next = parent.children[idx + 1];
-  if (!next || localName(next.name) !== "p") return false;
+  let at = idx + 1;
+  while (at < parent.children.length && MARKERS.includes(localName(parent.children[at].name))) at++;
+  const next = parent.children[at];
+  if (!next || localName(next.name) !== "p") {
+    const goes = gone === "del" ? ["pPr", "del", "moveFrom", "proofErr", ...MOVE_RANGES] : ["pPr", "ins", "moveTo", "proofErr", ...MOVE_RANGES];
+    const stays = MARKERS.filter((m) => m !== "proofErr");
+    const removable = (c) => goes.includes(localName(c.name)) || stays.includes(localName(c.name)) || isEmptyPlaceholder(c) || RUN_CONTAINERS.includes(localName(c.name)) && c.children.every(removable);
+    if (!pEl.children.every(removable)) return false;
+    parent.children.splice(idx, 1, ...pEl.children.filter((c) => stays.includes(localName(c.name))));
+    dropEmptiedControl(doc, parent);
+    return true;
+  }
+  const between = parent.children.slice(idx + 1, at);
   const moved = next.children.filter((c) => localName(c.name) !== "pPr");
-  pEl.children.push(...moved);
-  parent.children.splice(idx + 1, 1);
+  pEl.children.push(...between, ...moved);
+  parent.children.splice(idx + 1, at - idx);
+  carrySectionBreak(pEl, next);
   return true;
+}
+var MARKERS = ["bookmarkStart", "bookmarkEnd", "commentRangeStart", "commentRangeEnd", "permStart", "permEnd", "proofErr"];
+function carrySectionBreak(pEl, next) {
+  const pPrOf = (p) => p.children.find((c) => localName(c.name) === "pPr");
+  const sectOf = (p) => pPrOf(p)?.children.find((c) => localName(c.name) === "sectPr");
+  const mine = sectOf(pEl);
+  const theirs = sectOf(next);
+  if (!mine && !theirs) return;
+  let pPr = pPrOf(pEl);
+  if (!pPr) {
+    pPr = { name: "w:pPr", attrs: {}, children: [], text: "" };
+    pEl.children.unshift(pPr);
+  }
+  pPr.children = pPr.children.filter((c) => c !== mine);
+  if (theirs) {
+    const at = pPr.children.findIndex((c) => localName(c.name) === "pPrChange");
+    pPr.children.splice(at === -1 ? pPr.children.length : at, 0, theirs);
+  }
+  if (pPr.children.length === 0) pEl.children.splice(pEl.children.indexOf(pPr), 1);
 }
 function collectRevisions(doc) {
   const out = [];
   const walk2 = (el26) => {
     const ln2 = localName(el26.name);
     if (ln2 === "pPr") return;
-    if (ln2 === "ins" || ln2 === "del") {
+    if (ln2 === "ins" || ln2 === "del" || ln2 === "moveTo" || ln2 === "moveFrom") {
       out.push({
         el: el26,
-        kind: ln2 === "ins" ? "insertion" : "deletion",
+        kind: ln2 === "ins" || ln2 === "moveTo" ? "insertion" : "deletion",
         author: attrByLocal(el26, "author")
       });
     }
@@ -58649,10 +58843,10 @@ function collectRevisions(doc) {
       const rPr = pPr?.children.find((c) => localName(c.name) === "rPr");
       for (const c of rPr?.children ?? []) {
         const cn = localName(c.name);
-        if (cn === "ins" || cn === "del") {
+        if (cn === "ins" || cn === "del" || cn === "moveTo" || cn === "moveFrom") {
           out.push({
             el: c,
-            kind: cn === "ins" ? "markInsertion" : "markDeletion",
+            kind: cn === "ins" || cn === "moveTo" ? "markInsertion" : "markDeletion",
             paragraph: el26,
             author: attrByLocal(c, "author")
           });
@@ -58674,7 +58868,7 @@ function applyAccept(doc, ref) {
     case "markDeletion":
       if (!ref.paragraph) return false;
       removeMarkRevision(ref);
-      return joinWithNext(doc, ref.paragraph);
+      return joinWithNext(doc, ref.paragraph, "del");
     case "rowInsertion":
       return removeRowRevision(doc, ref);
     case "rowDeletion":
@@ -58745,7 +58939,7 @@ function applyReject(doc, ref) {
     case "markInsertion":
       if (!ref.paragraph) return false;
       removeMarkRevision(ref);
-      return joinWithNext(doc, ref.paragraph);
+      return joinWithNext(doc, ref.paragraph, "ins");
     case "markDeletion":
       return removeMarkRevision(ref);
     case "rowInsertion":
@@ -58796,10 +58990,22 @@ function applyToAll(doc, apply, author) {
     for (const part of held) notes.add(part);
   }
   if (n > 0) {
+    dropSettledMoveRanges(doc);
     doc.markNotePartsChanged([...notes]);
     doc.refresh();
   }
   return n;
+}
+var MOVE_RANGES = ["moveFromRangeStart", "moveFromRangeEnd", "moveToRangeStart", "moveToRangeEnd"];
+function dropSettledMoveRanges(doc) {
+  const roots = doc.revisionRoots();
+  const has = (el26) => ["moveFrom", "moveTo"].includes(localName(el26.name)) || el26.children.some(has);
+  if (roots.some(has)) return;
+  const strip = (el26) => {
+    el26.children = el26.children.filter((c) => !MOVE_RANGES.includes(localName(c.name)));
+    for (const c of el26.children) strip(c);
+  };
+  for (const root of roots) strip(root);
 }
 function removeMarkRevision(ref) {
   const pPr = ref.paragraph?.children.find((c) => localName(c.name) === "pPr");
@@ -58832,8 +59038,23 @@ function removeRow(doc, ref) {
   const idx = tbl.children.indexOf(ref.row);
   if (idx === -1) return false;
   tbl.children.splice(idx, 1);
-  if (!tbl.children.some((c) => localName(c.name) === "tr")) removeEl(doc, tbl);
+  if (!tbl.children.some((c) => localName(c.name) === "tr")) {
+    const holder = doc.findParentOf(tbl);
+    removeEl(doc, tbl);
+    if (holder) dropEmptiedControl(doc, holder);
+  }
   return true;
+}
+function dropEmptiedControl(doc, container) {
+  const ln2 = localName(container.name);
+  const control = ln2 === "sdtContent" ? doc.findParentOf(container) : ln2 === "customXml" ? container : void 0;
+  if (!control) return;
+  const left = container.children.filter((c) => localName(c.name) !== "customXmlPr");
+  if (left.some((c) => !MARKERS.includes(localName(c.name)))) return;
+  const holder = doc.findParentOf(control);
+  if (!holder) return;
+  holder.children.splice(holder.children.indexOf(control), 1, ...left.filter((c) => localName(c.name) !== "proofErr"));
+  dropEmptiedControl(doc, holder);
 }
 function el3(name, attrs = {}, children2 = [], text = "") {
   return { name, attrs, children: children2, text };
@@ -59176,7 +59397,31 @@ function mergeParagraphBackward(doc, pEl) {
   const moved = pEl.children.filter((c) => localName(c.name) !== "pPr" && !isPlaceholderRun(c));
   prev.children.push(...moved);
   parent.children.splice(idx, 1);
+  carryMarkRevision(prev, pEl);
   return finishMerge(prev);
+}
+function carryMarkRevision(survivor, gone) {
+  const markOf = (p) => p.children.find((c) => localName(c.name) === "pPr")?.children.find((c) => localName(c.name) === "rPr");
+  const isRev = (c) => localName(c.name) === "ins" || localName(c.name) === "del";
+  const theirs = markOf(gone)?.children.filter(isRev) ?? [];
+  let pPr = survivor.children.find((c) => localName(c.name) === "pPr");
+  let rPr = markOf(survivor);
+  if (!rPr && theirs.length === 0) return;
+  if (!rPr) {
+    const w = survivor.name.includes(":") ? survivor.name.slice(0, survivor.name.indexOf(":") + 1) : "";
+    if (!pPr) {
+      pPr = { name: `${w}pPr`, attrs: {}, children: [], text: "" };
+      survivor.children.unshift(pPr);
+    }
+    rPr = { name: `${w}rPr`, attrs: {}, children: [], text: "" };
+    const at = pPr.children.findIndex((c) => localName(c.name) === "sectPr" || localName(c.name) === "pPrChange");
+    pPr.children.splice(at === -1 ? pPr.children.length : at, 0, rPr);
+  }
+  rPr.children = [...theirs, ...rPr.children.filter((c) => !isRev(c))];
+  if (rPr.children.length === 0 && pPr) {
+    pPr.children.splice(pPr.children.indexOf(rPr), 1);
+    if (pPr.children.length === 0) survivor.children.splice(survivor.children.indexOf(pPr), 1);
+  }
 }
 function firstTextOf(pEl) {
   const walk2 = (el26) => {
@@ -75094,17 +75339,7 @@ var _DocxEditor = class _DocxEditor2 {
         if (pEl && firstTextOf(pEl) === caret.t) {
           this.host.history?.checkpoint();
           if (this.clearListAtCaret()) return;
-          const prev = siblingParagraph(this.host.doc, pEl, -1);
-          if (!prev) return;
-          const junction = lastTextOf(prev);
-          const mergeBlockId = this.host.onIntent && this.host.doc.stableIds ? this.host.doc.stableIds.idOf(pEl) : void 0;
-          if (mergeParagraphBackward(this.host.doc, pEl)) {
-            if (mergeBlockId !== void 0) this.host.onIntent?.({ kind: "mergeParagraph", blockId: mergeBlockId });
-            const target = junction && paragraphOf(this.host.doc, junction) ? junction : caret.t;
-            this.caret = { t: target, run: caret.run, offset: target === junction ? target.text.length : 0 };
-            invalidateParagraphSignature(paragraphOf(this.host.doc, target) ?? pEl);
-            this.commit(false, "local", true);
-          }
+          this.mergeIntoPrevious(pEl);
           return;
         }
         if (!this.stepToNeighbor(-1)) return;
@@ -75120,19 +75355,8 @@ var _DocxEditor = class _DocxEditor2 {
       if (caret.offset >= caret.t.text.length) {
         const pEl = paragraphOf(this.host.doc, caret.t);
         if (pEl && lastTextOf(pEl) === caret.t) {
-          const next = siblingParagraph(this.host.doc, pEl, 1);
-          if (!next) return;
           this.host.history?.checkpoint();
-          const mergeNextId = this.host.onIntent && this.host.doc.stableIds ? this.host.doc.stableIds.idOf(next) : void 0;
-          if (mergeParagraphBackward(this.host.doc, next)) {
-            if (mergeNextId !== void 0) this.host.onIntent?.({ kind: "mergeParagraph", blockId: mergeNextId });
-            if (!paragraphOf(this.host.doc, caret.t)) {
-              const t = firstTextOf(next);
-              if (t) this.caret = { t, run: caret.run, offset: 0 };
-            }
-            invalidateParagraphSignature(paragraphOf(this.host.doc, this.caret?.t ?? caret.t) ?? pEl);
-            this.commit(false, "local", true);
-          }
+          this.mergeNextInto(pEl);
           return;
         }
         if (!this.stepToNeighbor(1)) return;
@@ -75149,6 +75373,44 @@ var _DocxEditor = class _DocxEditor2 {
   }
   emitDelete(blockId, runId, start, end) {
     if (end > start) this.host.onIntent?.({ kind: "deleteText", blockId, runId, start, end });
+  }
+  /** Backspace at the start of `pEl`: merge it into the previous paragraph. */
+  mergeIntoPrevious(pEl) {
+    const caret = this.caret;
+    if (!caret) return;
+    const prev = siblingParagraph(this.host.doc, pEl, -1);
+    if (!prev) return;
+    const junction = lastTextOf(prev);
+    const mergeBlockId = this.host.onIntent && this.host.doc.stableIds ? this.host.doc.stableIds.idOf(pEl) : void 0;
+    if (mergeParagraphBackward(this.host.doc, pEl)) {
+      if (mergeBlockId !== void 0) this.host.onIntent?.({ kind: "mergeParagraph", blockId: mergeBlockId });
+      const target = junction && paragraphOf(this.host.doc, junction) ? junction : caret.t;
+      this.caret = { t: target, run: caret.run, offset: target === junction ? target.text.length : 0 };
+      invalidateParagraphSignature(paragraphOf(this.host.doc, target) ?? pEl);
+      this.commit(false, "local", true);
+    }
+  }
+  /** Delete at the end of `pEl`: merge the next paragraph into it. */
+  mergeNextInto(pEl) {
+    const caret = this.caret;
+    if (!caret) return;
+    const next = siblingParagraph(this.host.doc, pEl, 1);
+    if (!next) return;
+    const mergeNextId = this.host.onIntent && this.host.doc.stableIds ? this.host.doc.stableIds.idOf(next) : void 0;
+    if (mergeParagraphBackward(this.host.doc, next)) {
+      if (mergeNextId !== void 0) this.host.onIntent?.({ kind: "mergeParagraph", blockId: mergeNextId });
+      if (!paragraphOf(this.host.doc, caret.t)) {
+        const t = firstTextOf(next);
+        if (t) this.caret = { t, run: caret.run, offset: 0 };
+      }
+      invalidateParagraphSignature(paragraphOf(this.host.doc, this.caret?.t ?? caret.t) ?? pEl);
+      this.commit(false, "local", true);
+    }
+  }
+  /** True when `pEl`'s paragraph mark is a break this author suggested. */
+  ownSuggestedBreak(pEl) {
+    const mark = paragraphGlyphRevision(pEl, "ins");
+    return !!mark && attr(mark, "author") === this.revisionAuthor;
   }
   /** Backspace/Delete in suggesting mode: mark one character (or a paragraph
    * mark at a boundary) as a tracked deletion instead of removing it. Skips over
@@ -75170,6 +75432,10 @@ var _DocxEditor = class _DocxEditor2 {
           if (this.suggestUnbulletAtCaret()) return;
           const prev = siblingParagraph(doc, pEl, -1);
           if (!prev) return;
+          if (this.ownSuggestedBreak(prev)) {
+            this.mergeIntoPrevious(pEl);
+            return;
+          }
           if (paragraphGlyphRevision(prev, "del")) {
             this.stepToNeighbor(-1);
             this.positionCaret();
@@ -75199,6 +75465,10 @@ var _DocxEditor = class _DocxEditor2 {
     if (caret.offset >= caret.t.text.length) {
       const pEl = paragraphOf(doc, caret.t);
       if (pEl && lastTextOf(pEl) === caret.t) {
+        if (this.ownSuggestedBreak(pEl)) {
+          this.mergeNextInto(pEl);
+          return;
+        }
         if (paragraphGlyphRevision(pEl, "del")) {
           this.stepToNeighbor(1);
           this.positionCaret();
@@ -76052,6 +76322,7 @@ function nearestInstance(list, near) {
   }
   return best;
 }
+var GAP_PAIR_CAP = 200 * 200;
 function el24(name, attrs = {}, children2 = [], text = "") {
   return { name, attrs, children: children2, text };
 }
@@ -84479,7 +84750,7 @@ Apply to the open document using its observed revision and editorSessionId.`,
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       _meta: {
         ui: { resourceUri: EDITOR_URI },
-        "openai/ui": { entrypoints: [{ type: "file", extensions: ["docx"] }], preferredModelDisplayMode: "fullscreen" }
+        "openai/ui": { entrypoints: [{ type: "file", extensions: [".docx"] }], preferredModelDisplayMode: "fullscreen" }
       }
     },
     async ({ file: file2 }) => {

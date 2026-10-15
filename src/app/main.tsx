@@ -32,7 +32,8 @@ function openFile(file: unknown, editorSessionId?: string) {
     await controller.flush();
     await disconnect?.();
     disconnect = undefined;
-    await controller.open(file);
+    // Join the chat session even when loading fails, so the model gets the reason at once.
+    await controller.open(file).catch(controller.report);
     try {
       disconnect = await connectServerTools(controller, editorSessionId);
       openingSessionId = editorSessionId;
