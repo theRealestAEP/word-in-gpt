@@ -34,24 +34,43 @@ async function query(sql) {
 }
 
 // blob1 = client kind, blob2 = event, index1 = hashed user (see src/server/usage.ts).
-const rows = await query(`
-  SELECT toStartOfInterval(timestamp, INTERVAL '1' DAY) AS day, blob1 AS client, blob2 AS event,
-         count(DISTINCT index1) AS users
+// Analytics Engine keeps three months of data.
+const pairs = await query(`
+  SELECT toStartOfInterval(timestamp, INTERVAL '1' DAY) AS day, blob1 AS client, blob2 AS event, index1 AS user
   FROM word_in_gpt_usage
-  WHERE timestamp > NOW() - INTERVAL '14' DAY
-  GROUP BY day, client, event
-  ORDER BY day DESC, client, event
+  WHERE timestamp > NOW() - INTERVAL '90' DAY
+  GROUP BY day, client, event, user
   FORMAT JSON`);
 
-console.log("day         client          connected  used a tool");
 const days = new Map();
-for (const { day, client, event, users } of rows) {
-  const key = `${day.slice(0, 10)}  ${client.padEnd(14)}`;
-  const counts = days.get(key) ?? { connect: 0, "tool-call": 0 };
-  counts[event] = Number(users);
-  days.set(key, counts);
+const firstSeen = new Map();
+for (const { day, client, event, user } of pairs) {
+  const date = day.slice(0, 10);
+  const counts = days.get(date) ?? { chatgpt: new Set(), connected: new Set(), used: new Set() };
+  if (client === "chatgpt") {
+    counts.chatgpt.add(user);
+    if (!firstSeen.has(user) || date < firstSeen.get(user)) firstSeen.set(user, date);
+  } else if (event === "connect") counts.connected.add(user);
+  else counts.used.add(user);
+  days.set(date, counts);
 }
-for (const [key, counts] of days) {
-  console.log(`${key}  ${String(counts.connect).padStart(9)}  ${String(counts["tool-call"]).padStart(11)}`);
+
+const pad = (value, width) => String(value).padStart(width);
+console.log("day (UTC)   ChatGPT users   new  returning   Codex connected  Codex used a tool");
+for (const date of [...days.keys()].sort()) {
+  const { chatgpt, connected, used } = days.get(date);
+  const fresh = [...chatgpt].filter((user) => firstSeen.get(user) === date).length;
+  console.log(`${date}  ${pad(chatgpt.size, 13)}  ${pad(fresh, 4)}  ${pad(chatgpt.size - fresh, 9)}   ${pad(connected.size, 15)}  ${pad(used.size, 17)}`);
 }
-console.log("\nchatgpt: exact users (anonymized ChatGPT user ID). codex-desktop: installs, estimated per day by network and version.");
+console.log(`\nChatGPT users ever: ${firstSeen.size}`);
+
+const lastHour = await query(`
+  SELECT blob1 AS client, blob2 AS event, count(DISTINCT index1) AS users
+  FROM word_in_gpt_usage
+  WHERE timestamp > NOW() - INTERVAL '1' HOUR
+  GROUP BY client, event
+  FORMAT JSON`);
+const hour = (client, event) => lastHour.find((row) => row.client === client && row.event === event)?.users ?? 0;
+console.log(`Last hour: ${hour("chatgpt", "tool-call")} ChatGPT users · ${hour("codex-desktop", "connect")} Codex connected · ${hour("codex-desktop", "tool-call")} Codex used a tool`);
+console.log("\nChatGPT: exact users who called a tool; new means first seen since counting began on Oct 13, 2026.");
+console.log("Codex desktop: installs estimated per day by network and version, so new and returning cannot be told apart.");
