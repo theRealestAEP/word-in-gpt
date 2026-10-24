@@ -6,12 +6,25 @@ export interface UsageEnv {
   USAGE_SALT: string;
 }
 
-type McpMessage = { method?: string; params?: { _meta?: Record<string, unknown> } };
+type McpMessage = { method?: string; params?: { name?: unknown; _meta?: Record<string, unknown> } };
 
-// Each Worker instance records a user at most once per day per event,
-// so a busy Codex install costs one data point, not thousands.
+// Each Worker instance records a user at most once per day per kind of call,
+// so a busy Codex install costs a few data points, not thousands.
 const recorded = new Set<string>();
 let recordedDay = "";
+
+/**
+ * What a tool call does, so a report can tell people who opened a document
+ * from people who worked on one. Tool names are public; no document content is stored.
+ */
+export function toolKind(name: unknown): string {
+  if (typeof name !== "string") return "other";
+  if (name.startsWith("open_word_")) return "open";
+  if (name.startsWith("word_editor_") || name === "word_attachment_read") return "connect";
+  if (["word_document_inspect", "word_document_project", "word_document_capabilities"].includes(name)) return "read";
+  if (name.startsWith("word_document_")) return "edit";
+  return "other";
+}
 
 /**
  * Record one unique-user data point for an MCP request.
@@ -47,11 +60,14 @@ export async function recordUsage(request: Request, env: UsageEnv): Promise<void
     return;
   }
   const event = message.method === "tools/call" ? "tool-call" : "connect";
+  const action = event === "tool-call" ? toolKind(message.params?.name) : "";
   const user = (await sha256Hex(`${env.USAGE_SALT}:${source}`)).slice(0, 16);
-  if (recorded.has(`${user}:${event}`)) return;
-  recorded.add(`${user}:${event}`);
-  // blob1 = client kind, blob2 = event, index1 = hashed user.
-  env.USAGE.writeDataPoint({ indexes: [user], blobs: [kind, event] });
+  if (recorded.has(`${user}:${event}:${action}`)) return;
+  recorded.add(`${user}:${event}:${action}`);
+  // blob1 = client kind, blob2 = event, blob3 = what the call does, blob4 = tool name,
+  // index1 = hashed user. Data points written before blob3 existed have it empty.
+  const tool = event === "tool-call" && typeof message.params?.name === "string" ? message.params.name.slice(0, 80) : "";
+  env.USAGE.writeDataPoint({ indexes: [user], blobs: [kind, event, action, tool] });
 }
 
 async function sha256Hex(text: string): Promise<string> {
