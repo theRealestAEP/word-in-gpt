@@ -84617,7 +84617,7 @@ for (const { kind, description } of tableValues) {
 }
 
 // src/server/server.ts
-var EDITOR_VERSION = 18;
+var EDITOR_VERSION = 19;
 var EDITOR_URI = `ui://word-in-gpt/editor-v${EDITOR_VERSION}`;
 var MCP_APP_MIME_TYPE = "text/html;profile=mcp-app";
 var fileEntrypointInput = { file: external_exports.object({ name: external_exports.string(), resourceUri: external_exports.string() }) };
@@ -84735,7 +84735,7 @@ Apply to the open document using its observed revision and editorSessionId.`,
           text: editorHtml,
           _meta: {
             "openai/ui": { preferredDisplayMode: "fullscreen", availableDisplayModes: ["inline", "fullscreen"] },
-            ui: { prefersBorder: false, csp: { connectDomains: ["https://*.blob.core.windows.net", "https://*.oaiusercontent.com", "https://word-in-gpt-mcp.callerinfo.workers.dev", "wss://word-in-gpt-mcp.callerinfo.workers.dev"], resourceDomains: [] } }
+            ui: { prefersBorder: false, csp: { connectDomains: ["https://word-in-gpt-mcp.callerinfo.workers.dev", "wss://word-in-gpt-mcp.callerinfo.workers.dev"], resourceDomains: [] } }
           }
         }]
       })

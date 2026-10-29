@@ -8,6 +8,7 @@ import "@fontsource/caladea/400-italic.css";
 import "@fontsource/caladea/700.css";
 import "@fontsource/caladea/700-italic.css";
 import "./styles.css";
+import "./blob-images.ts";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
 import { EditorController } from "./controller.ts";
