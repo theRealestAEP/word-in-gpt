@@ -138,21 +138,48 @@ export function writeFile(uri: string, bytes: Uint8Array, ifMatch: string | null
   );
 }
 
-/** Export the edited copy; uploaded files cannot overwrite their source attachment. */
+const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+/**
+ * Export the edited copy; uploaded files cannot overwrite their source attachment.
+ * The Codex app cancels every download that starts inside the app, so the first
+ * path asks the host to download (MCP Apps `ui/download-file`). Each path that
+ * fails hands over to the next one.
+ */
 export async function downloadDocx(file: HostFile, bytes: Uint8Array): Promise<void> {
-  const copy = new File([new Uint8Array(bytes)], file.name, { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+  const failures: string[] = [];
+  for (const exportCopy of [exportThroughHost, exportThroughChatGpt, exportThroughBrowser]) {
+    try {
+      await exportCopy(file, bytes);
+      return;
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  throw new Error(`Export failed: ${failures.join("; ")}. Keep this editor open to keep your edits.`);
+}
+
+async function exportThroughHost(file: HostFile, bytes: Uint8Array): Promise<void> {
+  const result = await host.request<{ isError?: boolean }>("ui/download-file", {
+    contents: [{ type: "resource", resource: { uri: `file:///${encodeURIComponent(file.name)}`, mimeType: DOCX_MIME, blob: bytesToBase64(bytes) } }],
+  }, FILE_TIMEOUT_MS);
+  if (result?.isError) throw new Error("the host refused the download");
+}
+
+async function exportThroughChatGpt(file: HostFile, bytes: Uint8Array): Promise<void> {
   const openai = (window as unknown as { openai?: {
     uploadFile?: (file: File) => Promise<{ fileId: string }>;
     getFileDownloadUrl?: (input: { fileId: string }) => Promise<{ downloadUrl: string }>;
     openExternal?: (input: { href: string }) => void;
   } }).openai;
-  if (openai?.uploadFile && openai.getFileDownloadUrl && openai.openExternal) {
-    const { fileId } = await openai.uploadFile(copy);
-    const { downloadUrl } = await openai.getFileDownloadUrl({ fileId });
-    openai.openExternal({ href: downloadUrl });
-    return;
-  }
-  const url = URL.createObjectURL(copy);
+  if (!openai?.uploadFile || !openai.getFileDownloadUrl || !openai.openExternal) throw new Error("the host has no file API");
+  const { fileId } = await openai.uploadFile(new File([new Uint8Array(bytes)], file.name, { type: DOCX_MIME }));
+  const { downloadUrl } = await openai.getFileDownloadUrl({ fileId });
+  openai.openExternal({ href: downloadUrl });
+}
+
+function exportThroughBrowser(file: HostFile, bytes: Uint8Array): void {
+  const url = URL.createObjectURL(new File([new Uint8Array(bytes)], file.name, { type: DOCX_MIME }));
   const link = document.createElement("a");
   link.href = url;
   link.download = file.name;

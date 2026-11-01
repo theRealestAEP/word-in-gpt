@@ -112,10 +112,13 @@ async function withinRateLimit(request: Request, env: Env, path: string): Promis
 
 // Codex re-checks every connected MCP server about every 45 seconds per open app.
 // None of these requests touches an editor session, so the Worker answers them
-// and the single relay only handles tool calls, resource reads, and editors.
-const POLLING_METHODS = new Set(["initialize", "notifications/initialized", "ping", "tools/list"]);
+// and the single relay only handles tool calls and editors. The Worker also
+// answers resources/read: it loads the editor HTML again after every deploy,
+// while the long-lived relay keeps the copy it loaded when it started.
+const POLLING_METHODS = new Set(["initialize", "notifications/initialized", "ping", "tools/list", "resources/read"]);
 let toolsList: Promise<string> | undefined;
 let icon: Promise<string> | undefined;
+let editorHtml: Promise<string> | undefined;
 
 /** Answer a polling request in the Worker, or return null to send it to the relay. */
 async function answerPolling(request: Request, env: Env): Promise<Response | null> {
@@ -146,8 +149,15 @@ async function answerPolling(request: Request, env: Env): Promise<Response | nul
     icon = undefined;
     throw error;
   });
-  // The editor HTML is only sent by resources/read, which the relay answers.
-  return respondMcp(createServer("", iconSvg), request);
+  let html = "";
+  if (method === "resources/read") {
+    editorHtml ??= env.ASSETS.fetch("https://assets/app.html").then(response => response.text());
+    html = await editorHtml.catch((error: unknown) => {
+      editorHtml = undefined;
+      throw error;
+    });
+  }
+  return respondMcp(createServer(html, iconSvg), request);
 }
 
 const ERROR_RETENTION_SECONDS = 30 * 24 * 60 * 60;

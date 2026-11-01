@@ -196,6 +196,18 @@ it("answers Codex's polling in the Worker with the same tool list the server bui
   expect(relay).toHaveBeenCalledTimes(1);
 });
 
+it("serves the editor from the current deploy's assets, not from the relay's older copy", async () => {
+  const { env, relay } = pollingEnv({ "app.html": "<html>New editor</html>", "icon.svg": "<svg/>" });
+  const read = new Request("https://worker.example/mcp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 5, method: "resources/read", params: { uri: "ui://word-in-gpt/editor-v19" } }),
+  });
+  const response = await worker.fetch(read, env, { waitUntil: vi.fn() } as never);
+  expect(await response.json()).toMatchObject({ id: 5, result: { contents: [{ uri: "ui://word-in-gpt/editor-v19", text: "<html>New editor</html>" }] } });
+  expect(relay).not.toHaveBeenCalled();
+});
+
 it("sends tools/list to the relay when the built list is missing", async () => {
   vi.spyOn(console, "error").mockImplementation(() => {});
   const { env, relay } = pollingEnv({ "icon.svg": "<svg/>" });

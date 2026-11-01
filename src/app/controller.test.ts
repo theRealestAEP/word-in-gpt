@@ -159,9 +159,34 @@ it("runs submitted read, search, and wording cases on an uploaded copy and expor
   const getFileDownloadUrl = vi.fn().mockResolvedValue({ downloadUrl: "https://files.example/edited.docx" });
   const openExternal = vi.fn();
   vi.stubGlobal("window", { openai: { uploadFile, getFileDownloadUrl, openExternal } });
+  request.mockRejectedValueOnce(new Error("Method not found")); // a host without ui/download-file
   await controller.download();
   expect(getFileDownloadUrl).toHaveBeenCalledWith({ fileId: "file_edited" });
   expect(openExternal).toHaveBeenCalledWith({ href: "https://files.example/edited.docx" });
+});
+
+it("exports through the host's download request, which the Codex app allows", async () => {
+  const { controller } = await openFixture("review-host-download");
+  const openExternal = vi.fn();
+  vi.stubGlobal("window", { openai: { uploadFile: vi.fn(), getFileDownloadUrl: vi.fn(), openExternal } });
+  await controller.download();
+  const [method, params] = request.mock.calls.find(([name]) => name === "ui/download-file")!;
+  expect(method).toBe("ui/download-file");
+  const { uri, mimeType, blob } = params.contents[0].resource;
+  expect(uri).toBe("file:///review.docx");
+  expect(mimeType).toBe("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+  const exported: any = await AgentDocument.load(Uint8Array.from(Buffer.from(blob, "base64"))).inspect({ kind: "context" });
+  expect(exported.contents[0].blocks.map((block: any) => block.text)).toEqual(["Quarterly review", "Revenue increased this quarter."]);
+  expect(openExternal).not.toHaveBeenCalled();
+  expect(controller.state.status).toBe("Download started");
+});
+
+it("tells the user when every export path fails, and keeps the edits open", async () => {
+  const { controller } = await openFixture("review-export-fails");
+  vi.stubGlobal("window", { openai: { uploadFile: vi.fn().mockRejectedValue(new Error("upload refused")), getFileDownloadUrl: vi.fn(), openExternal: vi.fn() } });
+  request.mockResolvedValueOnce({ isError: true });
+  await expect(controller.download()).rejects.toThrow(/Export failed: the host refused the download; upload refused/);
+  expect(controller.state.doc).not.toBeNull();
 });
 
 it("runs the submitted heading-centering case and preserves text in the exported DOCX", async () => {
