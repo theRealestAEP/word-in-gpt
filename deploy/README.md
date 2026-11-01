@@ -147,6 +147,8 @@ and [Durable Object state](https://developers.cloudflare.com/durable-objects/api
 
 Increment EDITOR_VERSION in src/server/server.ts for every deployed UI change. Hosts cache templates by URI; verify the live resource matches plugin/dist/app.html after deployment.
 
+A deploy does not restart a running `WordEditorRelay`: it keeps the editor HTML and the code it started with. The front Worker therefore answers `resources/read` itself, and each new Durable Object feature gets its own class (`ExportCopies`). Test UI changes in the Codex app, not only with unit tests: it cancels every download that starts inside an editor, and ignores `ui/download-file`. Download DOCX posts the copy to `/exports`, and the host opens the one-time link in the user's browser.
+
 ## Free-plan budget
 
 Cloudflare's Workers Free plan provides 100,000 dynamic requests per day and

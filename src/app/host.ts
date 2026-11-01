@@ -140,18 +140,22 @@ export function writeFile(uri: string, bytes: Uint8Array, ifMatch: string | null
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
+const EXPORT_URL = "https://word-in-gpt-mcp.callerinfo.workers.dev/exports";
+
 /**
  * Export the edited copy; uploaded files cannot overwrite their source attachment.
- * The Codex app cancels every download that starts inside the app, so the first
- * path asks the host to download (MCP Apps `ui/download-file`). Each path that
- * fails hands over to the next one.
+ * The Codex app cancels every download that starts inside the app, and ignores the
+ * MCP Apps `ui/download-file` request, so the first path hands the host a link to
+ * open in the user's browser. Each path that fails hands over to the next one. The
+ * browser download cannot report whether the host cancelled it, so reaching it after
+ * other paths failed returns a warning for the status bar.
  */
-export async function downloadDocx(file: HostFile, bytes: Uint8Array): Promise<void> {
+export async function downloadDocx(file: HostFile, bytes: Uint8Array): Promise<string | null> {
   const failures: string[] = [];
-  for (const exportCopy of [exportThroughHost, exportThroughChatGpt, exportThroughBrowser]) {
+  for (const exportCopy of [exportThroughLink, exportThroughChatGpt, exportThroughBrowser]) {
     try {
       await exportCopy(file, bytes);
-      return;
+      return exportCopy === exportThroughBrowser && failures.length ? `Download may not have started: ${failures.join("; ")}` : null;
     } catch (error) {
       failures.push(error instanceof Error ? error.message : String(error));
     }
@@ -159,11 +163,12 @@ export async function downloadDocx(file: HostFile, bytes: Uint8Array): Promise<v
   throw new Error(`Export failed: ${failures.join("; ")}. Keep this editor open to keep your edits.`);
 }
 
-async function exportThroughHost(file: HostFile, bytes: Uint8Array): Promise<void> {
-  const result = await host.request<{ isError?: boolean }>("ui/download-file", {
-    contents: [{ type: "resource", resource: { uri: `file:///${encodeURIComponent(file.name)}`, mimeType: DOCX_MIME, blob: bytesToBase64(bytes) } }],
-  }, FILE_TIMEOUT_MS);
-  if (result?.isError) throw new Error("the host refused the download");
+async function exportThroughLink(file: HostFile, bytes: Uint8Array): Promise<void> {
+  const response = await fetch(`${EXPORT_URL}?name=${encodeURIComponent(file.name)}`, { method: "POST", body: new Uint8Array(bytes) });
+  if (!response.ok) throw new Error(`the server refused the copy (${response.status})`);
+  const { url } = await response.json() as { url: string };
+  const opened = await host.request<{ isError?: boolean }>("ui/open-link", { url }, FILE_TIMEOUT_MS);
+  if (opened?.isError) throw new Error("the host would not open the download link");
 }
 
 async function exportThroughChatGpt(file: HostFile, bytes: Uint8Array): Promise<void> {

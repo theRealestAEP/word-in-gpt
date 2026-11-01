@@ -111,8 +111,8 @@ export class EditorController {
   async download(): Promise<void> {
     await this.flush();
     this.set({ status: "Preparing download…" });
-    await downloadDocx(this.state.file!, this.state.doc!.session.doc.save());
-    this.set({ status: "Download started" });
+    const warning = await downloadDocx(this.state.file!, this.state.doc!.session.doc.save());
+    this.set({ status: warning ?? "Download started" });
   }
 
   /** Counts a user or model edit and schedules a save. */

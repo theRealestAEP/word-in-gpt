@@ -8,7 +8,7 @@ import { EDIT_TOOLS } from "./edit-tools.ts";
 // The URI is the host's cache key for the UI: change it when the app changes
 // in a way an already-open editor cannot load.
 // Increment for each deployed UI change: hosts cache templates by their URI.
-const EDITOR_VERSION = 19;
+const EDITOR_VERSION = 22;
 const EDITOR_URI = `ui://word-in-gpt/editor-v${EDITOR_VERSION}`;
 const MCP_APP_MIME_TYPE = "text/html;profile=mcp-app";
 

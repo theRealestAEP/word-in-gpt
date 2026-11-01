@@ -1,7 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { afterEach, expect, it, vi } from "vitest";
-import worker, { WordEditorRelay } from "./worker.ts";
+import worker, { ExportCopies, WordEditorRelay } from "./worker.ts";
 import { fetchOpenAIFile } from "./server.ts";
 import { toolsListResult } from "./tools-list.ts";
 
@@ -101,6 +101,26 @@ it("refuses to relay hosts outside OpenAI file storage", async () => {
       expect(refused.isError).toBe(true);
     }
   } finally { await client.close(); }
+});
+
+it("hands an exported copy out once as a download and refuses oversized copies", async () => {
+  const relay = new ExportCopies();
+  const bytes = new Uint8Array([80, 75, 3, 4]);
+  const made = await relay.fetch(new Request("https://worker.example/exports?name=Q3%20review.docx", { method: "POST", body: bytes }));
+  expect(made.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  const { url } = await made.json() as { url: string };
+  expect(url).toMatch(/^https:\/\/worker\.example\/exports\/[0-9a-f-]{36}$/);
+
+  const downloaded = await relay.fetch(new Request(url));
+  expect(new Uint8Array(await downloaded.arrayBuffer())).toEqual(bytes);
+  expect(downloaded.headers.get("Content-Disposition")).toBe("attachment; filename*=UTF-8''Q3%20review.docx");
+  expect(downloaded.headers.get("Content-Type")).toBe("application/octet-stream");
+  expect(downloaded.headers.get("X-Content-Type-Options")).toBe("nosniff");
+  expect((await relay.fetch(new Request(url))).status).toBe(404);
+
+  const tooBig = await relay.fetch(new Request("https://worker.example/exports", { method: "POST", body: new Uint8Array(21 * 1024 * 1024) }));
+  expect(tooBig.status).toBe(413);
+  expect((await relay.fetch(new Request("https://worker.example/exports", { method: "OPTIONS" }))).status).toBe(200);
 });
 
 it("follows redirects only to OpenAI file storage and never relays a page", async () => {

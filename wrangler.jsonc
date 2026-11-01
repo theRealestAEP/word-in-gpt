@@ -28,7 +28,13 @@
   // The USAGE_SALT secret is set with `wrangler secret put USAGE_SALT`.
   "analytics_engine_datasets": [{ "binding": "USAGE", "dataset": "word_in_gpt_usage" }],
   "durable_objects": {
-    "bindings": [{ "name": "EDITOR_RELAY", "class_name": "WordEditorRelay" }]
+    "bindings": [
+      { "name": "EDITOR_RELAY", "class_name": "WordEditorRelay" },
+      { "name": "EXPORT_COPIES", "class_name": "ExportCopies" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["WordEditorRelay"] }]
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["WordEditorRelay"] },
+    { "tag": "v2", "new_sqlite_classes": ["ExportCopies"] }
+  ]
 }

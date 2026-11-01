@@ -159,33 +159,47 @@ it("runs submitted read, search, and wording cases on an uploaded copy and expor
   const getFileDownloadUrl = vi.fn().mockResolvedValue({ downloadUrl: "https://files.example/edited.docx" });
   const openExternal = vi.fn();
   vi.stubGlobal("window", { openai: { uploadFile, getFileDownloadUrl, openExternal } });
-  request.mockRejectedValueOnce(new Error("Method not found")); // a host without ui/download-file
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch"))); // the export link is unavailable
   await controller.download();
   expect(getFileDownloadUrl).toHaveBeenCalledWith({ fileId: "file_edited" });
   expect(openExternal).toHaveBeenCalledWith({ href: "https://files.example/edited.docx" });
 });
 
-it("exports through the host's download request, which the Codex app allows", async () => {
-  const { controller } = await openFixture("review-host-download");
+it("exports through a link that the host opens in the user's browser", async () => {
+  const { controller } = await openFixture("review-link-download");
   const openExternal = vi.fn();
+  const fetchExport = vi.fn().mockResolvedValue(Response.json({ url: "https://worker.example/exports/token-1" }));
+  vi.stubGlobal("fetch", fetchExport);
   vi.stubGlobal("window", { openai: { uploadFile: vi.fn(), getFileDownloadUrl: vi.fn(), openExternal } });
   await controller.download();
-  const [method, params] = request.mock.calls.find(([name]) => name === "ui/download-file")!;
-  expect(method).toBe("ui/download-file");
-  const { uri, mimeType, blob } = params.contents[0].resource;
-  expect(uri).toBe("file:///review.docx");
-  expect(mimeType).toBe("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-  const exported: any = await AgentDocument.load(Uint8Array.from(Buffer.from(blob, "base64"))).inspect({ kind: "context" });
+  const [target, init] = fetchExport.mock.calls[0];
+  expect(target).toBe("https://word-in-gpt-mcp.callerinfo.workers.dev/exports?name=review.docx");
+  expect(init.method).toBe("POST");
+  const exported: any = await AgentDocument.load(init.body).inspect({ kind: "context" });
   expect(exported.contents[0].blocks.map((block: any) => block.text)).toEqual(["Quarterly review", "Revenue increased this quarter."]);
+  expect(request).toHaveBeenCalledWith("ui/open-link", { url: "https://worker.example/exports/token-1" }, expect.any(Number));
   expect(openExternal).not.toHaveBeenCalled();
   expect(controller.state.status).toBe("Download started");
+});
+
+it("warns when only the browser download is left, because the host may cancel it", async () => {
+  vi.useFakeTimers();
+  const { controller } = await openFixture("review-browser-fallback");
+  const link = { click: vi.fn(), remove: vi.fn() };
+  vi.stubGlobal("window", {});
+  vi.stubGlobal("document", { createElement: () => link, body: { append: vi.fn() } });
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+  await controller.download();
+  expect(link.click).toHaveBeenCalled();
+  expect(controller.state.status).toBe("Download may not have started: Failed to fetch; the host has no file API");
+  vi.useRealTimers();
 });
 
 it("tells the user when every export path fails, and keeps the edits open", async () => {
   const { controller } = await openFixture("review-export-fails");
   vi.stubGlobal("window", { openai: { uploadFile: vi.fn().mockRejectedValue(new Error("upload refused")), getFileDownloadUrl: vi.fn(), openExternal: vi.fn() } });
-  request.mockResolvedValueOnce({ isError: true });
-  await expect(controller.download()).rejects.toThrow(/Export failed: the host refused the download; upload refused/);
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 413 })));
+  await expect(controller.download()).rejects.toThrow(/Export failed: the server refused the copy \(413\); upload refused/);
   expect(controller.state.doc).not.toBeNull();
 });
 
