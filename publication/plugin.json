@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "word-in-gpt",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "View and edit .docx files together with chat.",
   "author": {
     "name": "Alex Pickett",

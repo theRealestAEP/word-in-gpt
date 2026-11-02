@@ -1,0 +1,26 @@
+Word in Chat 0.1.5: release notes for review
+
+Fixes
+- Download DOCX now saves the edited copy in the Codex app. The Codex app cancels
+  downloads that start inside an app and ignores ui/download-file. The editor now
+  posts the edited copy to /exports on the same MCP server. The server returns a
+  one-time link, and the editor asks the host to open it with ui/open-link. The
+  ChatGPT file API and the browser download remain as fallbacks.
+- The status bar reports when a download may not have started, with the reason.
+- In Codex, the model opens a local .docx on the first request. The skill and the
+  tool descriptions now tell it to pass the file path to open_word_document.
+
+Data handling
+- An exported copy stays in server memory until it downloads once, or for at most
+  90 seconds. It is never logged or written to storage. The privacy page states
+  this (updated November 2, 2026).
+
+Technical changes the scan will show
+- The editor template URI is ui://word-in-gpt/editor-v22. The server still serves
+  the current editor at older URIs, so open threads keep working.
+- New route on the MCP server origin: POST /exports and a one-time GET
+  /exports/<token>. No new domains.
+
+Review test cases
+- Unchanged. Cases 4 and 5 use Download DOCX; the ChatGPT file API path still
+  serves as the fallback there.

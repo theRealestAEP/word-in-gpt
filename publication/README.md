@@ -1,6 +1,32 @@
 # Publication preparation
 
-## Current package — October 8, 2026
+## Current package — November 2, 2026
+
+The current ZIP is `word-in-chat-0.1.5.zip`; `submission-draft.zip` contains the
+same package. Its manifest declares version 0.1.5. It has the same nine files as
+0.1.4. The only content change is step 1 of the `word-editor` skill: in Codex,
+the model passes a local .docx path to `open_word_document`. The old text sent
+it to `open_word_resource` with a `file:///` URL, which the hosted server refuses.
+
+The live Worker (version `0acd60fe-bb0b-41ea-bafa-7a9f567cd4c5`) serves
+editor-v22. Changes since 0.1.4 that the portal scan sees:
+
+- The tool metadata references `ui://word-in-gpt/editor-v22` (was v19).
+- Download DOCX first posts the edited copy to `/exports` on the same Worker.
+  The Worker keeps it in memory for 90 seconds and returns a one-time link. The
+  editor asks the host to open that link with `ui/open-link`. The Codex app
+  cancels downloads inside the editor and ignores `ui/download-file`, so this
+  is the only export path that works there. The ChatGPT file API path and the
+  browser download remain as fallbacks.
+- The open-tool descriptions and the `file:///` refusal now name the call that
+  opens a local path in Codex.
+
+Fifty-seven tests and typechecking pass. In the Codex app, a new thread opened a
+local .docx on the first request, and Download DOCX saved a valid copy to
+Downloads. The ChatGPT web and mobile export through `ui/open-link` is not yet
+tested. Review cases 4 and 5 depend on it.
+
+## Previous package — October 8, 2026
 
 The current ZIP is `word-in-chat-0.1.4.zip`; `submission-draft.zip` contains the
 same package. Its manifest declares version 0.1.4. The nine packaged files are
