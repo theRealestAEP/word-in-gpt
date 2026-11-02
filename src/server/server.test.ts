@@ -50,6 +50,9 @@ it("advertises model tools and routes calls through the app-only connection", as
     expect(tools.some(t => t.name.startsWith("word_local_"))).toBe(false);
     const local = await client.callTool({ name: "open_word_document", arguments: { file: { name: "test.docx", resourceUri: "file:///tmp/test.docx" } } });
     expect(local.isError).toBe(true);
+    const localPath = await client.callTool({ name: "open_word_resource", arguments: { file: { name: "My Letter.docx", resourceUri: "file:///Users/me/My%20Letter.docx" } } });
+    expect(localPath.isError).toBe(true);
+    expect(localPath.content).toEqual([{ type: "text", text: expect.stringContaining(`open_word_document with {"file":"/Users/me/My Letter.docx"}`) }]);
     const staleUpload = await client.callTool({ name: "open_word_resource", arguments: { file: { name: "review.docx", resourceUri: "word-upload://file_review" } } });
     expect(staleUpload.isError).toBe(true);
     expect(staleUpload.content).toEqual([{ type: "text", text: expect.stringContaining("original ChatGPT file parameters") }]);

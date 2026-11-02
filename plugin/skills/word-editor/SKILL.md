@@ -9,7 +9,7 @@ The Word editor shows a .docx file with Word page layout. The user and you edit 
 
 ## Show a document
 
-1. In ChatGPT web or mobile, attach a DOCX and call `open_word_document` with ChatGPT's file object: `download_url`, `file_id`, and optional `file_name` and `mime_type`. Copy these values from the attachment. With the locally installed plugin, its opener instead accepts `{"file":{"name":"report.docx","resourceUri":"file:///absolute/path/report.docx"}}`. Host file viewers use `open_word_resource` with the granted resource URI.
+1. In ChatGPT web or mobile, attach a DOCX and call `open_word_document` with ChatGPT's file object: `download_url`, `file_id`, and optional `file_name` and `mime_type`. Copy these values from the attachment. In Codex, call `open_word_document` with the absolute path of a local .docx: `{"file":"/absolute/path/report.docx"}`. The host uploads a copy. Host file viewers use `open_word_resource` with the granted resource URI. Only a locally installed plugin accepts a `file:///` URL as `resourceUri`.
 2. Check the editor panel or its model context to confirm that the file opened. The panel shows the file name, save status, and chat connection status. `open_in_codex` is also available, but its `queued` acknowledgement alone does not confirm that the host launched the editor.
 3. An absolute file link is useful for locating the document, but the host can route attachment and review links to its built-in document preview. That preview supports annotations; the Word editor has an editing toolbar.
 

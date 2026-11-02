@@ -169,8 +169,13 @@ async function answerPolling(request: Request, env: Env): Promise<Response | nul
   let method: unknown = "GET";
   let id: unknown;
   if (request.method === "POST") {
-    ({ method, id } = await request.clone().json().catch(() => ({})) as { method?: unknown; id?: unknown });
-    if (typeof method !== "string" || !POLLING_METHODS.has(method)) return null;
+    let params: { name?: unknown; arguments?: { file?: { resourceUri?: unknown } } } | undefined;
+    ({ method, id, params } = await request.clone().json().catch(() => ({})) as { method?: unknown; id?: unknown; params?: typeof params });
+    // The server refuses a file URL before it opens an editor session, so the
+    // Worker answers it with the current refusal text.
+    const refusesFileUrl = method === "tools/call" && params?.name === "open_word_resource" &&
+      String(params.arguments?.file?.resourceUri).startsWith("file:");
+    if (typeof method !== "string" || (!POLLING_METHODS.has(method) && !refusesFileUrl)) return null;
   }
   if (method === "tools/list") {
     // Built at deploy time (dev/prepare-worker-assets.mjs): converting every tool

@@ -228,6 +228,21 @@ it("serves the editor from the current deploy's assets, not from the relay's old
   expect(relay).not.toHaveBeenCalled();
 });
 
+it("refuses a file URL in the Worker with the current text, and relays every other open", async () => {
+  const { env, relay } = pollingEnv({ "icon.svg": "<svg/>" });
+  const open = (resourceUri: string) => new Request("https://worker.example/mcp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "open_word_resource", arguments: { file: { name: "a.docx", resourceUri } } } }),
+  });
+  const ctx = { waitUntil: vi.fn() } as never;
+  const refused = await worker.fetch(open("file:///Users/me/a.docx"), env, ctx);
+  expect(await refused.json()).toMatchObject({ id: 6, result: { isError: true, content: [{ text: expect.stringContaining(`{"file":"/Users/me/a.docx"}`) }] } });
+  expect(relay).not.toHaveBeenCalled();
+  await worker.fetch(open("codex-file://granted"), env, ctx);
+  expect(relay).toHaveBeenCalledTimes(1);
+});
+
 it("sends tools/list to the relay when the built list is missing", async () => {
   vi.spyOn(console, "error").mockImplementation(() => {});
   const { env, relay } = pollingEnv({ "icon.svg": "<svg/>" });

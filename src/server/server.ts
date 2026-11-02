@@ -145,7 +145,7 @@ export function createServer(editorHtml: string, iconSvg: string, localFiles?: L
       title: localFiles ? "Open local DOCX in Word in Chat" : "Open host DOCX in Word in Chat",
       description: localFiles
         ? "Open a local .docx in the live Word editor. Set file.name to its filename and file.resourceUri to its absolute file:/// URL. Also accepts host-granted resource URIs."
-        : "Open a DOCX supplied by a desktop host using its granted resource URI. For ChatGPT uploaded attachments, including reopening one, use open_word_document with the original attachment's file parameters.",
+        : "Open a DOCX supplied by a desktop host using its granted resource URI. For a local .docx path, call open_word_document with the absolute path as file. For ChatGPT uploaded attachments, including reopening one, use open_word_document with the original attachment's file parameters.",
       inputSchema: fileEntrypointInput,
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       _meta: {
@@ -156,7 +156,7 @@ export function createServer(editorHtml: string, iconSvg: string, localFiles?: L
     async ({ file }) => {
       if (file.resourceUri.startsWith("word-upload://")) throw new Error("Reopen the uploaded attachment with open_word_document and its original ChatGPT file parameters.");
       if (file.resourceUri.startsWith("file:")) {
-        if (!localFiles) throw new Error("Local file URLs require the locally installed Word in Chat plugin.");
+        if (!localFiles) throw new Error(`This tool does not accept file URLs. Call open_word_document with {"file":${JSON.stringify(decodeURIComponent(new URL(file.resourceUri).pathname))}}. The host uploads a copy of the file.`);
         file = await localFiles.open(file.resourceUri);
       }
       const editorSessionId = sessions.connect();
@@ -184,7 +184,7 @@ export function createServer(editorHtml: string, iconSvg: string, localFiles?: L
     });
     server.registerTool("open_word_document", {
       title: "Open uploaded DOCX in Word in Chat",
-      description: "Open an uploaded DOCX in Word in Chat. Pass the file supplied by ChatGPT. Use the editorSessionId returned by this tool for document tools. Confirm opening by inspecting the document. Edits stay in the editor; choose Download DOCX to export an edited copy.",
+      description: "Open an uploaded DOCX in Word in Chat. Pass the file supplied by ChatGPT. In Codex, pass a local .docx as its absolute path, for example {\"file\":\"/Users/me/report.docx\"}. Use the editorSessionId returned by this tool for document tools. Confirm opening by inspecting the document. Edits stay in the editor; choose Download DOCX to export an edited copy.",
       inputSchema: uploadedFileInput,
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       _meta: { ui: { resourceUri: EDITOR_URI }, "openai/fileParams": ["file"],

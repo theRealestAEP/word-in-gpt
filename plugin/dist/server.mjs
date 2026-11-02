@@ -84617,7 +84617,7 @@ for (const { kind, description } of tableValues) {
 }
 
 // src/server/server.ts
-var EDITOR_VERSION = 19;
+var EDITOR_VERSION = 22;
 var EDITOR_URI = `ui://word-in-gpt/editor-v${EDITOR_VERSION}`;
 var MCP_APP_MIME_TYPE = "text/html;profile=mcp-app";
 var fileEntrypointInput = { file: external_exports.object({ name: external_exports.string(), resourceUri: external_exports.string() }) };
@@ -84745,7 +84745,7 @@ Apply to the open document using its observed revision and editorSessionId.`,
     localFiles ? "open_word_document" : "open_word_resource",
     {
       title: localFiles ? "Open local DOCX in Word in Chat" : "Open host DOCX in Word in Chat",
-      description: localFiles ? "Open a local .docx in the live Word editor. Set file.name to its filename and file.resourceUri to its absolute file:/// URL. Also accepts host-granted resource URIs." : "Open a DOCX supplied by a desktop host using its granted resource URI. For ChatGPT uploaded attachments, including reopening one, use open_word_document with the original attachment's file parameters.",
+      description: localFiles ? "Open a local .docx in the live Word editor. Set file.name to its filename and file.resourceUri to its absolute file:/// URL. Also accepts host-granted resource URIs." : "Open a DOCX supplied by a desktop host using its granted resource URI. For a local .docx path, call open_word_document with the absolute path as file. For ChatGPT uploaded attachments, including reopening one, use open_word_document with the original attachment's file parameters.",
       inputSchema: fileEntrypointInput,
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       _meta: {
@@ -84756,7 +84756,7 @@ Apply to the open document using its observed revision and editorSessionId.`,
     async ({ file: file2 }) => {
       if (file2.resourceUri.startsWith("word-upload://")) throw new Error("Reopen the uploaded attachment with open_word_document and its original ChatGPT file parameters.");
       if (file2.resourceUri.startsWith("file:")) {
-        if (!localFiles) throw new Error("Local file URLs require the locally installed Word in Chat plugin.");
+        if (!localFiles) throw new Error(`This tool does not accept file URLs. Call open_word_document with {"file":${JSON.stringify(decodeURIComponent(new URL(file2.resourceUri).pathname))}}. The host uploads a copy of the file.`);
         file2 = await localFiles.open(file2.resourceUri);
       }
       const editorSessionId = sessions.connect();
@@ -84785,7 +84785,7 @@ Apply to the open document using its observed revision and editorSessionId.`,
     });
     server.registerTool("open_word_document", {
       title: "Open uploaded DOCX in Word in Chat",
-      description: "Open an uploaded DOCX in Word in Chat. Pass the file supplied by ChatGPT. Use the editorSessionId returned by this tool for document tools. Confirm opening by inspecting the document. Edits stay in the editor; choose Download DOCX to export an edited copy.",
+      description: 'Open an uploaded DOCX in Word in Chat. Pass the file supplied by ChatGPT. In Codex, pass a local .docx as its absolute path, for example {"file":"/Users/me/report.docx"}. Use the editorSessionId returned by this tool for document tools. Confirm opening by inspecting the document. Edits stay in the editor; choose Download DOCX to export an edited copy.',
       inputSchema: uploadedFileInput,
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       _meta: {
