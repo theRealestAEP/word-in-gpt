@@ -24,7 +24,8 @@
   ],
   // Caught relay errors, one entry each, kept 30 days. Read them with `npm run errors`.
   "kv_namespaces": [{ "binding": "ERROR_LOG", "id": "587c2ccbef5243478eb4eb9cc481f076" }],
-  // Unique users: one hashed data point per user per day. Read them with `npm run usage`.
+  // Unique users (one hashed data point per user per day) and failure counts.
+  // Read them with `npm run usage`.
   // The USAGE_SALT secret is set with `wrangler secret put USAGE_SALT`.
   "analytics_engine_datasets": [{ "binding": "USAGE", "dataset": "word_in_gpt_usage" }],
   "durable_objects": {

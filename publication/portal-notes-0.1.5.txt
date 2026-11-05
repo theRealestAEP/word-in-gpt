@@ -10,13 +10,22 @@ Fixes
 - In Codex, the model opens a local .docx on the first request. The skill and the
   tool descriptions now tell it to pass the file path to open_word_document.
 
+Reliability
+- Each open document now has its own relay, so a relay failure stops one document
+  and leaves the others working.
+- An editor that keeps losing its connection now backs off, so it cannot reach the
+  rate limit. When a second editor takes over a session, the first one stops
+  reconnecting and shows "Chat connected in another window".
+
 Data handling
 - An exported copy stays in server memory until it downloads once, or for at most
   90 seconds. It is never logged or written to storage. The privacy page states
   this (updated November 2, 2026).
+- The server counts failed requests with a fixed label and the tool name. It never
+  stores error text or document content.
 
 Technical changes the scan will show
-- The editor template URI is ui://word-in-gpt/editor-v22. The server still serves
+- The editor template URI is ui://word-in-gpt/editor-v23. The server still serves
   the current editor at older URIs, so open threads keep working.
 - New route on the MCP server origin: POST /exports and a one-time GET
   /exports/<token>. No new domains.

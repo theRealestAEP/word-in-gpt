@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { recordUsage, toolKind } from "./usage.ts";
+import { failureReason, recordFailure, recordToolFailure, recordUsage, toolKind } from "./usage.ts";
 
 afterEach(() => vi.useRealTimers());
 
@@ -96,4 +96,37 @@ it("records each kind of call once per user per day, with the tool name and noth
   // One data point per kind: project repeats "read", and the later edit tools repeat "edit".
   expect(written).toEqual([["open", "open_word_document"], ["read", "word_document_inspect"], ["edit", "word_document_patch"]]);
   expect(JSON.stringify(env.USAGE.writeDataPoint.mock.calls)).not.toContain("worker");
+});
+
+it("labels each kind of tool failure", () => {
+  expect(failureReason("This editor session has closed. Reopen the document to reconnect.")).toBe("session-closed");
+  expect(failureReason("The editor disconnected before returning a result.")).toBe("editor-disconnected");
+  expect(failureReason("An editor command is running. Wait for its result before sending another.")).toBe("editor-busy");
+  expect(failureReason("MCP error -32602: Input validation error: Invalid arguments for tool word_document_patch")).toBe("invalid-input");
+  expect(failureReason("That revision is not from the open document.")).toBe("stale-revision");
+  expect(failureReason("Could not find the paragraph")).toBe("other");
+});
+
+it("stores the label of a failed tool call and never its text", async () => {
+  const env = usageEnv();
+  const message = { method: "tools/call", params: { name: "word_document_patch", _meta: { "openai/subject": "user-abc" } } };
+  const failed = Response.json({ result: { isError: true, content: [{ type: "text", text: "Could not find: private contract text" }] } });
+  await recordToolFailure(env as never, mcp("tools/call"), message, failed);
+  const [point] = env.USAGE.writeDataPoint.mock.calls[0];
+  expect(point).toEqual({ indexes: [expect.stringMatching(/^[0-9a-f]{16}$/)], blobs: ["chatgpt", "failure", "other", "word_document_patch"] });
+  expect(JSON.stringify(point)).not.toContain("private contract text");
+  expect(JSON.stringify(point)).not.toContain("user-abc");
+});
+
+it("ignores a tool call that worked, and counts every failure", async () => {
+  const env = usageEnv();
+  const message = { method: "tools/call", params: { name: "word_document_inspect" } };
+  await recordToolFailure(env as never, mcp("tools/call"), message, Response.json({ result: { content: [{ type: "text", text: "revision 4" }] } }));
+  expect(env.USAGE.writeDataPoint).not.toHaveBeenCalled();
+  await recordFailure(env as never, mcp("tools/call"), null, "rate-limited", "mcp");
+  await recordFailure(env as never, mcp("tools/call"), null, "rate-limited", "mcp");
+  expect(env.USAGE.writeDataPoint.mock.calls.map(([point]) => point)).toEqual([
+    { indexes: ["mcp"], blobs: ["unknown", "failure", "rate-limited", "mcp"] },
+    { indexes: ["mcp"], blobs: ["unknown", "failure", "rate-limited", "mcp"] },
+  ]);
 });

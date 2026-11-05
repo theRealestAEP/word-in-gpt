@@ -14,6 +14,9 @@ type Session = {
   close?: () => void;
 };
 
+// The close code a socket gets when a second editor takes over its session.
+export const EDITOR_REPLACED = 4000;
+
 const failure = (text: string): CallToolResult => ({ isError: true, content: [{ type: "text", text }] });
 
 /** Commands run in the open editor. The session ID is a private capability;

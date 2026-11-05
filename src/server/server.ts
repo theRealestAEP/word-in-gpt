@@ -8,7 +8,7 @@ import { EDIT_TOOLS } from "./edit-tools.ts";
 // The URI is the host's cache key for the UI: change it when the app changes
 // in a way an already-open editor cannot load.
 // Increment for each deployed UI change: hosts cache templates by their URI.
-const EDITOR_VERSION = 22;
+const EDITOR_VERSION = 23;
 const EDITOR_URI = `ui://word-in-gpt/editor-v${EDITOR_VERSION}`;
 const MCP_APP_MIME_TYPE = "text/html;profile=mcp-app";
 
@@ -59,7 +59,7 @@ const editTools = EDIT_TOOLS.map(tool => ({
  * files use the host's resource bridge. The stdio entry also supplies LocalFiles
  * so a model can directly launch an explicitly requested local document.
  */
-export function createServer(editorHtml: string, iconSvg: string, localFiles?: LocalFiles, sessions: EditorSessions = editorSessions, attachmentDownloadUrl?: (url: string) => string, editorSocketUrl?: (id: string) => string): McpServer {
+export function createServer(editorHtml: string, iconSvg: string, localFiles?: LocalFiles, sessions: EditorSessions = editorSessions, attachmentDownloadUrl?: (url: string) => string, editorSocketUrl?: (id: string) => string, newSessionId?: () => string): McpServer {
   const icon = { src: "data:image/svg+xml," + encodeURIComponent(iconSvg), mimeType: "image/svg+xml", sizes: ["any"] };
   const server = new McpServer({ name: "word-in-gpt", title: "Word in Chat", version: "0.1.4", icons: [icon] });
 
@@ -87,7 +87,7 @@ export function createServer(editorHtml: string, iconSvg: string, localFiles?: L
     description: "Connect the open editor to live document commands.", inputSchema: { editorSessionId: sessionId.optional() }, _meta: appOnly,
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
   }, async ({ editorSessionId }) => {
-    const id = sessions.connect(editorSessionId);
+    const id = sessions.connect(editorSessionId ?? newSessionId?.());
     return result({ editorSessionId: id, ...(editorSocketUrl ? { webSocketUrl: editorSocketUrl(id) } : {}) });
   });
   server.registerTool("word_editor_poll", {
@@ -159,7 +159,7 @@ export function createServer(editorHtml: string, iconSvg: string, localFiles?: L
         if (!localFiles) throw new Error(`This tool does not accept file URLs. Call open_word_document with {"file":${JSON.stringify(decodeURIComponent(new URL(file.resourceUri).pathname))}}. The host uploads a copy of the file.`);
         file = await localFiles.open(file.resourceUri);
       }
-      const editorSessionId = sessions.connect();
+      const editorSessionId = sessions.connect(newSessionId?.());
       return {
       content: [{
         type: "text",
@@ -192,7 +192,7 @@ export function createServer(editorHtml: string, iconSvg: string, localFiles?: L
     }, async ({ file }) => {
       if (new URL(file.download_url).protocol !== "https:") throw new Error("Use the HTTPS download URL supplied by ChatGPT.");
       const opened = { name: file.file_name ?? "document.docx", resourceUri: `word-upload://${file.file_id}` };
-      const editorSessionId = sessions.connect();
+      const editorSessionId = sessions.connect(newSessionId?.());
       return {
         ...result({ file: opened, editorSessionId }),
         _meta: { fileDownloadUrl: file.download_url },

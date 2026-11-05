@@ -84617,7 +84617,7 @@ for (const { kind, description } of tableValues) {
 }
 
 // src/server/server.ts
-var EDITOR_VERSION = 22;
+var EDITOR_VERSION = 23;
 var EDITOR_URI = `ui://word-in-gpt/editor-v${EDITOR_VERSION}`;
 var MCP_APP_MIME_TYPE = "text/html;profile=mcp-app";
 var fileEntrypointInput = { file: external_exports.object({ name: external_exports.string(), resourceUri: external_exports.string() }) };
@@ -84651,7 +84651,7 @@ var editTools = EDIT_TOOLS.map((tool) => ({
   ...tool,
   inputSchema: tool.inputSchema.extend({ editorSessionId: sessionId })
 }));
-function createServer(editorHtml, iconSvg, localFiles, sessions = editorSessions, attachmentDownloadUrl, editorSocketUrl) {
+function createServer(editorHtml, iconSvg, localFiles, sessions = editorSessions, attachmentDownloadUrl, editorSocketUrl, newSessionId) {
   const icon2 = { src: "data:image/svg+xml," + encodeURIComponent(iconSvg), mimeType: "image/svg+xml", sizes: ["any"] };
   const server = new McpServer({ name: "word-in-gpt", title: "Word in Chat", version: "0.1.4", icons: [icon2] });
   for (const tool of liveTools) {
@@ -84681,7 +84681,7 @@ Apply to the open document using its observed revision and editorSessionId.`,
     _meta: appOnly,
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false }
   }, async ({ editorSessionId }) => {
-    const id = sessions.connect(editorSessionId);
+    const id = sessions.connect(editorSessionId ?? newSessionId?.());
     return result({ editorSessionId: id, ...editorSocketUrl ? { webSocketUrl: editorSocketUrl(id) } : {} });
   });
   server.registerTool("word_editor_poll", {
@@ -84759,7 +84759,7 @@ Apply to the open document using its observed revision and editorSessionId.`,
         if (!localFiles) throw new Error(`This tool does not accept file URLs. Call open_word_document with {"file":${JSON.stringify(decodeURIComponent(new URL(file2.resourceUri).pathname))}}. The host uploads a copy of the file.`);
         file2 = await localFiles.open(file2.resourceUri);
       }
-      const editorSessionId = sessions.connect();
+      const editorSessionId = sessions.connect(newSessionId?.());
       return {
         content: [{
           type: "text",
@@ -84796,7 +84796,7 @@ Apply to the open document using its observed revision and editorSessionId.`,
     }, async ({ file: file2 }) => {
       if (new URL(file2.download_url).protocol !== "https:") throw new Error("Use the HTTPS download URL supplied by ChatGPT.");
       const opened = { name: file2.file_name ?? "document.docx", resourceUri: `word-upload://${file2.file_id}` };
-      const editorSessionId = sessions.connect();
+      const editorSessionId = sessions.connect(newSessionId?.());
       return {
         ...result({ file: opened, editorSessionId }),
         _meta: { fileDownloadUrl: file2.download_url },

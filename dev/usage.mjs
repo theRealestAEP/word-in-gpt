@@ -39,7 +39,7 @@ async function query(sql) {
 const pairs = await query(`
   SELECT toStartOfInterval(timestamp, INTERVAL '1' DAY) AS day, blob1 AS client, blob2 AS event, blob3 AS action, index1 AS user
   FROM word_in_gpt_usage
-  WHERE timestamp > NOW() - INTERVAL '90' DAY
+  WHERE timestamp > NOW() - INTERVAL '90' DAY AND blob2 != 'failure'
   GROUP BY day, client, event, action, user
   FORMAT JSON`);
 
@@ -83,6 +83,20 @@ const lastHour = await query(`
   FORMAT JSON`);
 const hour = (client, event) => lastHour.find((row) => row.client === client && row.event === event)?.users ?? 0;
 console.log(`Last hour: ${hour("chatgpt", "tool-call")} ChatGPT users · ${hour("codex-desktop", "connect")} Codex connected · ${hour("codex-desktop", "tool-call")} Codex used a tool`);
+const failures = await query(`
+  SELECT toStartOfInterval(timestamp, INTERVAL '1' DAY) AS day, blob3 AS reason, blob4 AS place, blob1 AS client,
+    SUM(_sample_interval) AS failures, count(DISTINCT index1) AS users
+  FROM word_in_gpt_usage
+  WHERE timestamp > NOW() - INTERVAL '7' DAY AND blob2 = 'failure'
+  GROUP BY day, reason, place, client
+  ORDER BY day, failures DESC
+  FORMAT JSON`);
+console.log("\nFailures, last 7 days");
+console.log("day (UTC)   failures  users  client         reason               tool or route");
+for (const { day, reason, place, client, failures: count, users } of failures) {
+  console.log(`${day.slice(0, 10)}  ${pad(count, 8)}  ${pad(client === "unknown" ? "-" : users, 5)}  ${client.padEnd(13)}  ${reason.padEnd(19)}  ${place}`);
+}
 console.log("\nChatGPT: exact users who called a tool; new means first seen since counting began on Oct 13, 2026.");
 console.log("Worked on a doc: the model read (inspect, project) or edited the document, not only opened it.");
 console.log("Codex desktop: installs estimated per day by network and version, so new and returning cannot be told apart.");
+console.log("Failures: fixed labels only, never error text. Browser requests carry no user ID, so their users show as -.");

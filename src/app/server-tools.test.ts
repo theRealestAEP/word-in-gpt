@@ -4,6 +4,7 @@ import type { EditorController } from "./controller.ts";
 const callServer = vi.hoisted(() => vi.fn());
 vi.mock("./host.ts", () => ({ callServer }));
 import { connectServerTools } from "./server-tools.ts";
+import { EDITOR_REPLACED } from "../server/editor-sessions.ts";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); callServer.mockReset(); });
 
@@ -13,12 +14,12 @@ class TestSocket {
   readyState = 0;
   onopen?: () => void;
   onmessage?: (event: { data: string }) => Promise<void>;
-  onclose: (() => void) | null = null;
+  onclose: ((event: { code?: number }) => void) | null = null;
   onerror?: () => void;
   send = vi.fn();
   constructor(readonly url: string) { TestSocket.sockets.push(this); }
   open() { this.readyState = 1; this.onopen?.(); }
-  close() { this.readyState = 3; this.onclose?.(); }
+  close(code?: number) { this.readyState = 3; this.onclose?.({ code }); }
 }
 
 function socketHost() {
@@ -67,6 +68,52 @@ it("reconnects a lost socket with the same session and backs off failed connecti
   TestSocket.sockets[1].open();
   expect(controller.connectChat).toHaveBeenNthCalledWith(2, "same-session");
   expect(callServer).toHaveBeenLastCalledWith("word_editor_connect", { editorSessionId: "same-session" });
+  await close();
+});
+
+it("keeps backing off when each new socket drops soon after it opens", async () => {
+  vi.useFakeTimers();
+  const controller = socketHost();
+  const close = await connectServerTools(controller, "same-session");
+  for (const delay of [500, 1000, 2000, 4000, 8000, 10_000, 10_000]) {
+    const opened = TestSocket.sockets.length;
+    TestSocket.sockets.at(-1)!.open();
+    TestSocket.sockets.at(-1)!.close();
+    await vi.advanceTimersByTimeAsync(delay - 1);
+    expect(TestSocket.sockets).toHaveLength(opened);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(TestSocket.sockets).toHaveLength(opened + 1);
+  }
+  await close();
+});
+
+it("resets the backoff after a socket stays open", async () => {
+  vi.useFakeTimers();
+  const controller = socketHost();
+  const close = await connectServerTools(controller, "same-session");
+  TestSocket.sockets[0].close();
+  await vi.advanceTimersByTimeAsync(500);
+  TestSocket.sockets[1].open();
+  await vi.advanceTimersByTimeAsync(30_000);
+  TestSocket.sockets[1].close();
+  await vi.advanceTimersByTimeAsync(500);
+  expect(TestSocket.sockets).toHaveLength(3);
+  await close();
+});
+
+it("stops reconnecting when another editor takes over the session, until the page is shown again", async () => {
+  vi.useFakeTimers();
+  const controller = socketHost();
+  const close = await connectServerTools(controller, "same-session");
+  TestSocket.sockets[0].open();
+  TestSocket.sockets[0].close(EDITOR_REPLACED);
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(TestSocket.sockets).toHaveLength(1);
+  expect(controller.setConnection).toHaveBeenLastCalledWith("Chat connected in another window");
+  const resume = vi.mocked(document.addEventListener).mock.calls[0][1] as () => void;
+  resume();
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(TestSocket.sockets).toHaveLength(2);
   await close();
 });
 

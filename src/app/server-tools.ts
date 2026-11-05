@@ -1,8 +1,11 @@
 import { callServer } from "./host.ts";
 import type { EditorController } from "./controller.ts";
-import type { EditorCommand } from "../server/editor-sessions.ts";
+import { EDITOR_REPLACED, type EditorCommand } from "../server/editor-sessions.ts";
 
 type Connection = { editorSessionId: string; webSocketUrl?: string };
+
+// A socket that stays open this long resets the backoff.
+const STABLE_SOCKET_MS = 30_000;
 
 async function runCommand(controller: EditorController, command: EditorCommand) {
   try {
@@ -21,6 +24,7 @@ function connectSocket(controller: EditorController, connection: Connection): ()
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let retryDelay = 500;
   let attempt = 0;
+  let openedAt = 0;
 
   const retry = () => {
     if (stopped || retryTimer !== undefined) return;
@@ -40,7 +44,7 @@ function connectSocket(controller: EditorController, connection: Connection): ()
     const active = socket;
     active.onopen = () => {
       if (stopped || active !== socket) return;
-      retryDelay = 500;
+      openedAt = Date.now();
       controller.connectChat(editorSessionId).catch(() => active.close());
     };
     active.onmessage = async event => {
@@ -49,7 +53,13 @@ function connectSocket(controller: EditorController, connection: Connection): ()
       const result = await runCommand(controller, command);
       if (!stopped && active.readyState === WebSocket.OPEN) active.send(JSON.stringify({ commandId: command.id, result }));
     };
-    active.onclose = () => { if (active === socket) retry(); };
+    active.onclose = event => {
+      if (active !== socket) return;
+      // Two editors on one session would otherwise push each other off in a loop.
+      if (event.code === EDITOR_REPLACED) { controller.setConnection("Chat connected in another window"); return; }
+      if (Date.now() - openedAt >= STABLE_SOCKET_MS) retryDelay = 500;
+      retry();
+    };
     active.onerror = () => active.close();
   };
   // Mobile browsers can suspend sockets while the page is in the background.

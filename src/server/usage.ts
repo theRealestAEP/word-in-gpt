@@ -6,7 +6,7 @@ export interface UsageEnv {
   USAGE_SALT: string;
 }
 
-type McpMessage = { method?: string; params?: { name?: unknown; _meta?: Record<string, unknown> } };
+export type McpMessage = { method?: string; params?: { name?: unknown; arguments?: Record<string, unknown>; _meta?: Record<string, unknown> } };
 
 // Each Worker instance records a user at most once per day per kind of call,
 // so a busy Codex install costs a few data points, not thousands.
@@ -27,14 +27,21 @@ export function toolKind(name: unknown): string {
 }
 
 /**
- * Record one unique-user data point for an MCP request.
- *
- * ChatGPT (and Codex in the cloud) sends an anonymized user ID on tool calls,
- * so those users are counted exactly. Codex desktop sends no user ID at all,
- * so an install is approximated by its IP address and client version. That
- * hash includes the day, so it identifies an install for one day only. Only
- * hashes are stored.
+ * Who sent a request. ChatGPT (and Codex in the cloud) sends an anonymized user
+ * ID on tool calls, so those users are counted exactly. Codex desktop sends no
+ * user ID at all, so an install is approximated by its IP address and client
+ * version. That hash includes the day, so it identifies an install for one day
+ * only. Only hashes are stored.
  */
+function identify(request: Request, message: McpMessage | null, day: string): { kind: string; source: string } | null {
+  const subject = message?.params?._meta?.["openai/subject"];
+  if (typeof subject === "string") return { kind: "chatgpt", source: `subject:${subject}` };
+  const client = request.headers.get("User-Agent") ?? "";
+  if (client.startsWith("codex-mcp-client/")) return { kind: "codex-desktop", source: `install:${day}:${request.headers.get("CF-Connecting-IP")}:${client}` };
+  return null;
+}
+
+/** Record one unique-user data point for an MCP request. */
 export async function recordUsage(request: Request, env: UsageEnv): Promise<void> {
   if (request.method !== "POST" || !env.USAGE_SALT) return;
   const message = await request.clone().json().catch(() => null) as McpMessage | null;
@@ -45,20 +52,10 @@ export async function recordUsage(request: Request, env: UsageEnv): Promise<void
     recorded.clear();
     recordedDay = day;
   }
-  const client = request.headers.get("User-Agent") ?? "";
-  const subject = message.params?._meta?.["openai/subject"];
-  let kind: string;
-  let source: string;
-  if (typeof subject === "string") {
-    kind = "chatgpt";
-    source = `subject:${subject}`;
-  } else if (client.startsWith("codex-mcp-client/")) {
-    kind = "codex-desktop";
-    source = `install:${day}:${request.headers.get("CF-Connecting-IP")}:${client}`;
-  } else {
-    // OpenAI's relay sends initialize without a user ID; its tool calls carry one.
-    return;
-  }
+  // OpenAI's relay sends initialize without a user ID; its tool calls carry one.
+  const identity = identify(request, message, day);
+  if (!identity) return;
+  const { kind, source } = identity;
   const event = message.method === "tools/call" ? "tool-call" : "connect";
   const action = event === "tool-call" ? toolKind(message.params?.name) : "";
   const user = (await sha256Hex(`${env.USAGE_SALT}:${source}`)).slice(0, 16);
@@ -68,6 +65,36 @@ export async function recordUsage(request: Request, env: UsageEnv): Promise<void
   // index1 = hashed user. Data points written before blob3 existed have it empty.
   const tool = event === "tool-call" && typeof message.params?.name === "string" ? message.params.name.slice(0, 80) : "";
   env.USAGE.writeDataPoint({ indexes: [user], blobs: [kind, event, action, tool] });
+}
+
+/**
+ * The kind of a tool failure, as a fixed label. Error text can quote the
+ * document, so the text itself is never stored.
+ */
+export function failureReason(text: string): string {
+  if (text.includes("session has closed")) return "session-closed";
+  if (text.includes("editor disconnected")) return "editor-disconnected";
+  if (text.includes("command is running")) return "editor-busy";
+  if (text.includes("Input validation error")) return "invalid-input";
+  if (text.includes("revision")) return "stale-revision";
+  return "other";
+}
+
+/** Count one failed request. Each failure is one data point, so a report shows how often it happens. */
+export async function recordFailure(env: UsageEnv, request: Request, message: McpMessage | null, reason: string, place: string): Promise<void> {
+  if (!env.USAGE_SALT) return;
+  const identity = identify(request, message, new Date().toISOString().slice(0, 10));
+  const user = identity ? (await sha256Hex(`${env.USAGE_SALT}:${identity.source}`)).slice(0, 16) : place;
+  // blob1 = client kind, blob2 = "failure", blob3 = reason, blob4 = tool name or route.
+  env.USAGE.writeDataPoint({ indexes: [user], blobs: [identity?.kind ?? "unknown", "failure", reason, place] });
+}
+
+/** Count a tool call that answered with an error. */
+export async function recordToolFailure(env: UsageEnv, request: Request, message: McpMessage, response: Response): Promise<void> {
+  const { result, error } = await response.json() as { result?: { isError?: boolean; content?: { text?: string }[] }; error?: { message?: string } };
+  if (!error && !result?.isError) return;
+  const text = error?.message ?? result?.content?.[0]?.text ?? "";
+  await recordFailure(env, request, message, failureReason(text), String(message.params?.name).slice(0, 80));
 }
 
 async function sha256Hex(text: string): Promise<string> {

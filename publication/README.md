@@ -8,10 +8,11 @@ same package. Its manifest declares version 0.1.5. It has the same nine files as
 the model passes a local .docx path to `open_word_document`. The old text sent
 it to `open_word_resource` with a `file:///` URL, which the hosted server refuses.
 
-The live Worker (version `0acd60fe-bb0b-41ea-bafa-7a9f567cd4c5`) serves
-editor-v22. Changes since 0.1.4 that the portal scan sees:
+Deploy the Worker before you submit, because the portal scan reads the live
+server. The current commit serves editor-v23. Changes since 0.1.4 that the
+portal scan sees:
 
-- The tool metadata references `ui://word-in-gpt/editor-v22` (was v19).
+- The tool metadata references `ui://word-in-gpt/editor-v23` (was v19).
 - Download DOCX first posts the edited copy to `/exports` on the same Worker.
   The Worker keeps it in memory for 90 seconds and returns a one-time link. The
   editor asks the host to open that link with `ui/open-link`. The Codex app
