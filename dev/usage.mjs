@@ -39,7 +39,7 @@ async function query(sql) {
 const pairs = await query(`
   SELECT toStartOfInterval(timestamp, INTERVAL '1' DAY) AS day, blob1 AS client, blob2 AS event, blob3 AS action, index1 AS user
   FROM word_in_gpt_usage
-  WHERE timestamp > NOW() - INTERVAL '90' DAY AND blob2 != 'failure'
+  WHERE timestamp > NOW() - INTERVAL '90' DAY AND blob2 IN ('connect', 'tool-call')
   GROUP BY day, client, event, action, user
   FORMAT JSON`);
 
@@ -95,6 +95,25 @@ console.log("\nFailures, last 7 days");
 console.log("day (UTC)   failures  users  client         reason               tool or route");
 for (const { day, reason, place, client, failures: count, users } of failures) {
   console.log(`${day.slice(0, 10)}  ${pad(count, 8)}  ${pad(client === "unknown" ? "-" : users, 5)}  ${client.padEnd(13)}  ${reason.padEnd(19)}  ${place}`);
+}
+const timings = await query(`
+  SELECT blob3 AS size, blob4 AS page, SUM(_sample_interval) AS loads,
+    quantileWeighted(0.5, double1 + double2 + double3 + double4, _sample_interval) AS median,
+    quantileWeighted(0.9, double1 + double2 + double3 + double4, _sample_interval) AS p90,
+    quantileWeighted(0.9, double1, _sample_interval) AS p90Start,
+    quantileWeighted(0.9, double2, _sample_interval) AS p90Read,
+    quantileWeighted(0.9, double3, _sample_interval) AS p90Show,
+    quantileWeighted(0.9, double4, _sample_interval) AS p90Connect
+  FROM word_in_gpt_usage
+  WHERE timestamp > NOW() - INTERVAL '7' DAY AND blob2 = 'timing'
+  GROUP BY size, page
+  ORDER BY size, page
+  FORMAT JSON`);
+const seconds = (ms) => pad((ms / 1000).toFixed(1), 6);
+console.log("\nEditor load, seconds from page start to connected, last 7 days");
+console.log("size         page     loads  median     p90  | p90 start  read  show  connect");
+for (const { size, page, loads, median, p90, p90Start, p90Read, p90Show, p90Connect } of timings) {
+  console.log(`${size.padEnd(11)}  ${page.padEnd(7)}  ${pad(loads, 5)}  ${seconds(median)}  ${seconds(p90)}  | ${seconds(p90Start)}  ${seconds(p90Read)}  ${seconds(p90Show)}  ${seconds(p90Connect)}`);
 }
 console.log("\nChatGPT: exact users who called a tool; new means first seen since counting began on Oct 13, 2026.");
 console.log("Worked on a doc: the model read (inspect, project) or edited the document, not only opened it.");

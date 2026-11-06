@@ -12,7 +12,7 @@ import "./blob-images.ts";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
 import { EditorController } from "./controller.ts";
-import { host, isHostFile, receiveUpload } from "./host.ts";
+import { host, isHostFile, receiveUpload, reportTiming } from "./host.ts";
 import { LIVE_TOOLS } from "./live-tools.ts";
 import { connectServerTools } from "./server-tools.ts";
 
@@ -22,6 +22,8 @@ createRoot(document.getElementById("root")!).render(<App controller={controller}
 let disconnect: (() => Promise<void>) | undefined;
 let connecting: Promise<void> | undefined;
 let openingSessionId: string | undefined;
+let wasHidden = document.hidden;
+document.addEventListener("visibilitychange", () => { wasHidden ||= document.hidden; });
 function openFile(file: unknown, editorSessionId?: string) {
   if (!isHostFile(file) || connecting) return;
   if (controller.state.doc && controller.state.file?.resourceUri === file.resourceUri &&
@@ -30,14 +32,17 @@ function openFile(file: unknown, editorSessionId?: string) {
   // in its tool result. Wait for that result before asking for the file bytes.
   if (file.resourceUri.startsWith("file:")) return;
   connecting = (async () => {
+    const page = performance.now();
     await controller.flush();
     await disconnect?.();
     disconnect = undefined;
     // Join the chat session even when loading fails, so the model gets the reason at once.
     await controller.open(file).catch(controller.report);
+    const opened = performance.now();
     try {
       disconnect = await connectServerTools(controller, editorSessionId);
       openingSessionId = editorSessionId;
+      reportTiming({ page, ...controller.loadTiming, connect: performance.now() - opened, hidden: wasHidden });
     }
     catch (error) { controller.setConnection(`Chat connection failed: ${error instanceof Error ? error.message : String(error)}`); }
   })().catch(controller.report).finally(() => { connecting = undefined; });

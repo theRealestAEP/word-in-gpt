@@ -37,6 +37,8 @@ export class EditorController {
   private edits = 0;
   private savedEdits = 0;
   private saveTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Milliseconds for the last load, and the file size. */
+  loadTiming = { read: 0, show: 0, bytes: 0 };
   // Saves run one at a time: two writes with the same ifMatch would make the second one conflict.
   private saveQueue: Promise<void> = Promise.resolve();
   private nextId = 1;
@@ -91,7 +93,11 @@ export class EditorController {
     this.set({ file, doc: null, status: "Loading", connection: "Loading document…" });
     try {
       if (!file.resourceUri.startsWith("word-local://") && !isUploadedFile(file.resourceUri)) await host.request("resources/subscribe", { uri: file.resourceUri });
-      this.show(await readFile(file.resourceUri));
+      const started = performance.now();
+      const snapshot = await readFile(file.resourceUri);
+      const read = performance.now();
+      this.show(snapshot);
+      this.loadTiming = { read: read - started, show: performance.now() - read, bytes: snapshot.bytes.byteLength };
     } catch (error) {
       this.loadError = error instanceof Error ? error.message : String(error);
       this.setConnection("Document unavailable");

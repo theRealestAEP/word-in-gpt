@@ -73,6 +73,7 @@ export async function recordUsage(request: Request, env: UsageEnv): Promise<void
  */
 export function failureReason(text: string): string {
   if (text.includes("session has closed")) return "session-closed";
+  if (text.includes("still loading")) return "editor-loading";
   if (text.includes("editor disconnected")) return "editor-disconnected";
   if (text.includes("command is running")) return "editor-busy";
   if (text.includes("Input validation error")) return "invalid-input";
@@ -95,6 +96,22 @@ export async function recordToolFailure(env: UsageEnv, request: Request, message
   if (!error && !result?.isError) return;
   const text = error?.message ?? result?.content?.[0]?.text ?? "";
   await recordFailure(env, request, message, failureReason(text), String(message.params?.name).slice(0, 80));
+}
+
+/**
+ * Count one editor load: milliseconds for each step from the page start to the
+ * connected editor. The file size is stored as a coarse bucket, with no name or content.
+ */
+export async function recordTiming(request: Request, env: UsageEnv): Promise<void> {
+  const { page, read, show, connect, bytes, hidden } = await request.json() as Record<string, unknown>;
+  const size = Number(bytes);
+  const bucket = size < 100_000 ? "under-100kb" : size < 1_000_000 ? "under-1mb" : size < 10_000_000 ? "under-10mb" : "10mb-plus";
+  // blob1 = "editor", blob2 = "timing", blob3 = size bucket, blob4 = whether the page was hidden.
+  env.USAGE.writeDataPoint({
+    indexes: ["editor"],
+    blobs: ["editor", "timing", bucket, hidden === true ? "hidden" : "visible"],
+    doubles: [page, read, show, connect].map(value => Math.round(Number(value)) || 0),
+  });
 }
 
 async function sha256Hex(text: string): Promise<string> {

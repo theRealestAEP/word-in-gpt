@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { failureReason, recordFailure, recordToolFailure, recordUsage, toolKind } from "./usage.ts";
+import { failureReason, recordFailure, recordTiming, recordToolFailure, recordUsage, toolKind } from "./usage.ts";
 
 afterEach(() => vi.useRealTimers());
 
@@ -101,6 +101,8 @@ it("records each kind of call once per user per day, with the tool name and noth
 it("labels each kind of tool failure", () => {
   expect(failureReason("This editor session has closed. Reopen the document to reconnect.")).toBe("session-closed");
   expect(failureReason("The editor disconnected before returning a result.")).toBe("editor-disconnected");
+  expect(failureReason("The editor is still loading this document, and this command did not run.")).toBe("editor-loading");
+  expect(failureReason("This editor session has closed. If the document is still loading, wait 10 seconds.")).toBe("session-closed");
   expect(failureReason("An editor command is running. Wait for its result before sending another.")).toBe("editor-busy");
   expect(failureReason("MCP error -32602: Input validation error: Invalid arguments for tool word_document_patch")).toBe("invalid-input");
   expect(failureReason("That revision is not from the open document.")).toBe("stale-revision");
@@ -128,5 +130,16 @@ it("ignores a tool call that worked, and counts every failure", async () => {
   expect(env.USAGE.writeDataPoint.mock.calls.map(([point]) => point)).toEqual([
     { indexes: ["mcp"], blobs: ["unknown", "failure", "rate-limited", "mcp"] },
     { indexes: ["mcp"], blobs: ["unknown", "failure", "rate-limited", "mcp"] },
+  ]);
+});
+
+it("stores a load's times with a coarse size and nothing that names the file", async () => {
+  const env = usageEnv();
+  const report = (body: unknown) => new Request("https://worker.example/timing", { method: "POST", body: JSON.stringify(body) });
+  await recordTiming(report({ page: 812.4, read: 1500, show: 40_000.6, connect: 300, bytes: 1_193_220, hidden: true, name: "secret.docx" }), env as never);
+  await recordTiming(report({ page: "x", bytes: 500 }), env as never);
+  expect(env.USAGE.writeDataPoint.mock.calls.map(([point]) => point)).toEqual([
+    { indexes: ["editor"], blobs: ["editor", "timing", "under-10mb", "hidden"], doubles: [812, 1500, 40001, 300] },
+    { indexes: ["editor"], blobs: ["editor", "timing", "under-100kb", "visible"], doubles: [0, 0, 0, 0] },
   ]);
 });

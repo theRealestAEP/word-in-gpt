@@ -1,6 +1,6 @@
 import { createServer, fetchOpenAIFile } from "./server.ts";
 import { EDITOR_REPLACED, EditorSessions } from "./editor-sessions.ts";
-import { recordFailure, recordToolFailure, recordUsage, type McpMessage, type UsageEnv } from "./usage.ts";
+import { recordFailure, recordTiming, recordToolFailure, recordUsage, type McpMessage, type UsageEnv } from "./usage.ts";
 import { respondMcp } from "./tools-list.ts";
 import type { DurableObjectNamespace, DurableObjectState, ExecutionContext, Fetcher, KVNamespace, RateLimit, Request as WorkerRequest, WebSocket as WorkerWebSocket, WebSocketPair as WorkerWebSocketPair } from "@cloudflare/workers-types";
 import { z } from "zod";
@@ -153,11 +153,11 @@ async function withinRateLimit(request: Request, env: Env, path: string): Promis
   return (await env.BROWSER_LIMIT.limit({ key: `${route}:${ip}` })).success;
 }
 
-// Codex re-checks every connected MCP server about every 45 seconds per open app.
-// None of these requests touches an editor session, so the Worker answers them
-// and the relays only handle tool calls and editors. The Worker also answers
-// resources/read: it loads the editor HTML again after every deploy.
-const POLLING_METHODS = new Set(["initialize", "notifications/initialized", "ping", "tools/list", "resources/read"]);
+// Codex re-checks every connected MCP server about every 45 seconds per open app,
+// and OpenAI probes for a newer protocol before it connects. Only a tool call
+// touches an editor session, so the Worker answers everything else and the relays
+// only handle tool calls and editors. The Worker also answers resources/read: it
+// loads the editor HTML again after every deploy.
 let toolsList: Promise<string> | undefined;
 let icon: Promise<string> | undefined;
 let editorHtml: Promise<string> | undefined;
@@ -168,13 +168,19 @@ async function answerPolling(request: Request, env: Env): Promise<Response | nul
   let method: unknown = "GET";
   let id: unknown;
   if (request.method === "POST") {
-    let params: { name?: unknown; arguments?: { file?: { resourceUri?: unknown } } } | undefined;
+    let params: { name?: unknown; arguments?: { file?: { resourceUri?: unknown } | string } } | undefined;
     ({ method, id, params } = await request.clone().json().catch(() => ({})) as { method?: unknown; id?: unknown; params?: typeof params });
-    // The server refuses a file URL before it opens an editor session, so the
-    // Worker answers it with the current refusal text.
-    const refusesFileUrl = method === "tools/call" && params?.name === "open_word_resource" &&
-      String(params.arguments?.file?.resourceUri).startsWith("file:");
-    if (typeof method !== "string" || (!POLLING_METHODS.has(method) && !refusesFileUrl)) return null;
+    if (method === "tools/call") {
+      const file = params?.arguments?.file;
+      // Codex lists this server twice. Only its app connector turns a path into an upload.
+      if (params?.name === "open_word_document" && typeof file === "string") {
+        const text = `This connection cannot read a local path. Call mcp__codex_apps__word_in_chat_open_word_document with ${JSON.stringify({ file })}. The host uploads a copy of the file.`;
+        return Response.json({ jsonrpc: "2.0", id, result: { isError: true, content: [{ type: "text", text }] } });
+      }
+      // The server refuses a file URL before it opens an editor session, so the
+      // Worker answers it with the current refusal text.
+      if (params?.name !== "open_word_resource" || typeof file === "string" || !String(file?.resourceUri).startsWith("file:")) return null;
+    }
   }
   if (method === "tools/list") {
     // Built at deploy time (dev/prepare-worker-assets.mjs): converting every tool
@@ -240,7 +246,7 @@ export default {
         headers: { "Content-Type": "text/plain; charset=utf-8" },
       });
     }
-    if (path === "/mcp" || path.startsWith("/attachments/") || path.startsWith("/editor/") || path === "/exports" || path.startsWith("/exports/")) {
+    if (path === "/mcp" || path.startsWith("/attachments/") || path.startsWith("/editor/") || path === "/exports" || path.startsWith("/exports/") || path === "/timing") {
       const route = path.split("/")[1];
       // A limiter outage must not take the service down with it.
       const allowed = await withinRateLimit(request, env, path).catch((error: unknown) => {
@@ -250,6 +256,10 @@ export default {
       if (!allowed) {
         ctx.waitUntil(recordFailure(env, request, null, "rate-limited", route).catch(() => {}));
         return new Response("Too many requests\n", { status: 429, headers: { "Retry-After": "10" } });
+      }
+      if (path === "/timing") {
+        ctx.waitUntil(recordTiming(request, env).catch(() => {}));
+        return new Response(null, { status: 204, headers: { "Access-Control-Allow-Origin": "*" } });
       }
       // Counting must never slow or fail a request, so it runs after the response.
       if (path === "/mcp") ctx.waitUntil(recordUsage(request, env).catch(() => {}));

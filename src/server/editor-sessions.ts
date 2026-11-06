@@ -18,6 +18,8 @@ type Session = {
 export const EDITOR_REPLACED = 4000;
 
 const failure = (text: string): CallToolResult => ({ isError: true, content: [{ type: "text", text }] });
+// A large document can take the editor over a minute to load.
+const stillLoading = () => failure("The editor is still loading this document, and this command did not run. Wait 10 seconds and call the tool again.");
 
 /** Commands run in the open editor. The session ID is a private capability;
  * there is deliberately no API that lists other users' sessions. */
@@ -41,7 +43,7 @@ export class EditorSessions {
 
   private get(id: string): Session {
     const session = this.sessions.get(id);
-    if (!session) throw new Error("This editor session has closed. Reopen the document to reconnect.");
+    if (!session) throw new Error("This editor session has closed. If the document is still loading, wait 10 seconds and call the tool again. Otherwise ask the user to reopen the document.");
     return session;
   }
 
@@ -86,8 +88,10 @@ export class EditorSessions {
     return new Promise((resolve) => {
       const command = { id: crypto.randomUUID(), name, arguments: args };
       const timer = setTimeout(() => {
+        // An undelivered command can never run, so the slow editor keeps its session.
+        if (session.pending?.delivered === false) session.pending.finish(stillLoading());
         // Close on timeout so a queued mutation can never execute later.
-        this.disconnect(id);
+        else this.disconnect(id);
       }, 45_000);
       session.pending = {
         command,
@@ -115,7 +119,7 @@ export class EditorSessions {
     const session = this.sessions.get(id);
     if (!session) return;
     clearTimeout(session.expiry);
-    session.pending?.finish(failure("The editor disconnected before returning a result. An edit may have completed; inspect the document before retrying."));
+    session.pending?.finish(session.pending.delivered ? failure("The editor disconnected before returning a result. An edit may have completed; inspect the document before retrying.") : stillLoading());
     session.wake?.();
     this.sessions.delete(id);
     session.close?.();

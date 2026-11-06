@@ -141,6 +141,12 @@ export function writeFile(uri: string, bytes: Uint8Array, ifMatch: string | null
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 const EXPORT_URL = "https://word-in-gpt-mcp.callerinfo.workers.dev/exports";
+const TIMING_URL = "https://word-in-gpt-mcp.callerinfo.workers.dev/timing";
+
+/** Report how long one editor load took. Numbers and a flag only; a lost report changes nothing. */
+export function reportTiming(timing: { page: number; read: number; show: number; connect: number; bytes: number; hidden: boolean }): void {
+  fetch(TIMING_URL, { method: "POST", body: JSON.stringify(timing) }).catch(() => {});
+}
 
 /**
  * Export the edited copy; uploaded files cannot overwrite their source attachment.

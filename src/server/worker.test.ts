@@ -367,3 +367,36 @@ it("answers 503 for the editor HTML when the Worker cannot load it, because a re
   expect(response.status).toBe(503);
   expect(relay).not.toHaveBeenCalled();
 });
+
+it("answers a protocol probe in the Worker, so it starts no relay", async () => {
+  const { env, relay } = pollingEnv({ "icon.svg": "<svg/>" });
+  const probe = new Request("https://worker.example/mcp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", "mcp-protocol-version": "2026-07-28" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 9, method: "server/discover", params: {} }),
+  });
+  const response = await worker.fetch(probe, env, { waitUntil: vi.fn() } as never);
+  expect(response.status).toBe(400);
+  expect(relay).not.toHaveBeenCalled();
+});
+
+it("names the app connector when a local path reaches the hosted open tool", async () => {
+  const { env, relay } = pollingEnv({ "icon.svg": "<svg/>" });
+  const response = await worker.fetch(toolCall("open_word_document", { file: "/Users/me/My Letter.docx" }), env, { waitUntil: vi.fn() } as never);
+  expect(await response.json()).toMatchObject({ id: 8, result: { isError: true, content: [{ text: expect.stringContaining(`mcp__codex_apps__word_in_chat_open_word_document with {"file":"/Users/me/My Letter.docx"}`) }] } });
+  expect(relay).not.toHaveBeenCalled();
+  // An uploaded file arrives as an object and opens through a relay.
+  await worker.fetch(toolCall("open_word_document", { file: { download_url: "https://example.com/a", file_id: "1" } }), env, { waitUntil: vi.fn() } as never);
+  expect(relay).toHaveBeenCalledTimes(1);
+});
+
+it("records a load report without touching a relay", async () => {
+  const { env, relay } = pollingEnv({});
+  const waited: Promise<unknown>[] = [];
+  const report = new Request("https://worker.example/timing", { method: "POST", body: JSON.stringify({ page: 1, read: 2, show: 3, connect: 4, bytes: 5, hidden: false }) });
+  const response = await worker.fetch(report, env, { waitUntil: (promise: Promise<unknown>) => waited.push(promise) } as never);
+  await Promise.all(waited);
+  expect(response.status).toBe(204);
+  expect(relay).not.toHaveBeenCalled();
+  expect((env as { USAGE: { writeDataPoint: ReturnType<typeof vi.fn> } }).USAGE.writeDataPoint).toHaveBeenCalledOnce();
+});

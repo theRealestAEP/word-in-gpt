@@ -28,14 +28,38 @@ describe("live editor routing", () => {
     expect((await response).isError).toBe(true);
   });
 
+  it("keeps the session and tells the model to retry when the editor has not arrived", async () => {
+    vi.useFakeTimers();
+    const id = open();
+    const response = sessions.call(id, "word_document_inspect", { kind: "context" });
+    await vi.advanceTimersByTimeAsync(45_000);
+    expect(await response).toMatchObject({ isError: true, content: [{ text: expect.stringContaining("still loading") }] });
+    expect(sessions.has(id)).toBe(true);
+    // The withdrawn command never reaches the editor, and the next call does.
+    const retry = sessions.call(id, "word_document_inspect", { kind: "read" });
+    const send = vi.fn();
+    sessions.attach(id, send, vi.fn());
+    expect(send.mock.calls.map(([command]) => command.arguments)).toEqual([{ kind: "read" }]);
+    sessions.reply(id, send.mock.calls[0][0].id, { content: [] });
+    await retry;
+  });
+
+  it("says a command did not run when the session expires before the editor arrives", async () => {
+    vi.useFakeTimers();
+    const id = open();
+    await vi.advanceTimersByTimeAsync(60_000);
+    const response = sessions.call(id, "word_document_inspect", { kind: "context" });
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(await response).toMatchObject({ isError: true, content: [{ text: expect.stringContaining("did not run") }] });
+    expect(() => sessions.call(id, "word_document_inspect", {})).toThrow("still loading, wait 10 seconds");
+  });
+
   it("discards a timed-out edit so a late editor cannot apply it", async () => {
     vi.useFakeTimers();
     const id = open();
     const response = sessions.call(id, "word_document_edit", {});
     await vi.advanceTimersByTimeAsync(45_000);
     expect((await response).isError).toBe(true);
-    await expect(sessions.poll(id)).rejects.toThrow("session has closed");
-    expect(sessions.connect(id)).toBe(id);
     const poll = sessions.poll(id);
     await vi.advanceTimersByTimeAsync(20_000);
     expect(await poll).toBeNull();

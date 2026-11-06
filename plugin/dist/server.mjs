@@ -84467,6 +84467,7 @@ var LIVE_TOOLS = AgentDocument.create().tools().filter((tool) => LIVE_TOOL_NAMES
 
 // src/server/editor-sessions.ts
 var failure2 = (text) => ({ isError: true, content: [{ type: "text", text }] });
+var stillLoading = () => failure2("The editor is still loading this document, and this command did not run. Wait 10 seconds and call the tool again.");
 var EditorSessions = class {
   sessions = /* @__PURE__ */ new Map();
   connect(existingId) {
@@ -84482,7 +84483,7 @@ var EditorSessions = class {
   }
   get(id) {
     const session = this.sessions.get(id);
-    if (!session) throw new Error("This editor session has closed. Reopen the document to reconnect.");
+    if (!session) throw new Error("This editor session has closed. If the document is still loading, wait 10 seconds and call the tool again. Otherwise ask the user to reopen the document.");
     return session;
   }
   has(id) {
@@ -84528,7 +84529,8 @@ var EditorSessions = class {
     return new Promise((resolve) => {
       const command = { id: crypto.randomUUID(), name, arguments: args };
       const timer = setTimeout(() => {
-        this.disconnect(id);
+        if (session.pending?.delivered === false) session.pending.finish(stillLoading());
+        else this.disconnect(id);
       }, 45e3);
       session.pending = {
         command,
@@ -84554,7 +84556,7 @@ var EditorSessions = class {
     const session = this.sessions.get(id);
     if (!session) return;
     clearTimeout(session.expiry);
-    session.pending?.finish(failure2("The editor disconnected before returning a result. An edit may have completed; inspect the document before retrying."));
+    session.pending?.finish(session.pending.delivered ? failure2("The editor disconnected before returning a result. An edit may have completed; inspect the document before retrying.") : stillLoading());
     session.wake?.();
     this.sessions.delete(id);
     session.close?.();
@@ -84617,7 +84619,7 @@ for (const { kind, description } of tableValues) {
 }
 
 // src/server/server.ts
-var EDITOR_VERSION = 23;
+var EDITOR_VERSION = 24;
 var EDITOR_URI = `ui://word-in-gpt/editor-v${EDITOR_VERSION}`;
 var MCP_APP_MIME_TYPE = "text/html;profile=mcp-app";
 var fileEntrypointInput = { file: external_exports.object({ name: external_exports.string(), resourceUri: external_exports.string() }) };
