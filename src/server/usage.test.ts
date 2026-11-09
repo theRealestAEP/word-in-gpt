@@ -32,6 +32,12 @@ it("counts a ChatGPT user once per day by a hash of the anonymized subject", asy
   expect(env.USAGE.writeDataPoint.mock.calls[1][0].indexes[0]).not.toBe(point.indexes[0]);
 });
 
+it("counts a Codex app connector user apart from ChatGPT users", async () => {
+  const env = usageEnv();
+  await recordUsage(mcp("tools/call", { subject: "user-codex", userAgent: "openai-mcp/1.0.0 (Codex)" }), env as never);
+  expect(env.USAGE.writeDataPoint.mock.calls[0][0].blobs).toEqual(["codex-app", "tool-call", "read", "word_document_inspect"]);
+});
+
 it("approximates a Codex desktop install by IP and version without storing either", async () => {
   vi.useFakeTimers({ now: new Date("2026-10-13T11:00:00Z") });
   const env = usageEnv();

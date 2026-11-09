@@ -27,16 +27,17 @@ export function toolKind(name: unknown): string {
 }
 
 /**
- * Who sent a request. ChatGPT (and Codex in the cloud) sends an anonymized user
- * ID on tool calls, so those users are counted exactly. Codex desktop sends no
- * user ID at all, so an install is approximated by its IP address and client
- * version. That hash includes the day, so it identifies an install for one day
- * only. Only hashes are stored.
+ * Who sent a request. OpenAI's relay sends an anonymized user ID on tool calls,
+ * so those users are counted exactly. The relay serves both ChatGPT and the Codex
+ * app connector, and marks Codex in its User-Agent. Codex's direct MCP connection
+ * sends no user ID at all, so an install is approximated by its IP address and
+ * client version. That hash includes the day, so it identifies an install for one
+ * day only. Only hashes are stored.
  */
 function identify(request: Request, message: McpMessage | null, day: string): { kind: string; source: string } | null {
   const subject = message?.params?._meta?.["openai/subject"];
-  if (typeof subject === "string") return { kind: "chatgpt", source: `subject:${subject}` };
   const client = request.headers.get("User-Agent") ?? "";
+  if (typeof subject === "string") return { kind: client.includes("(Codex)") ? "codex-app" : "chatgpt", source: `subject:${subject}` };
   if (client.startsWith("codex-mcp-client/")) return { kind: "codex-desktop", source: `install:${day}:${request.headers.get("CF-Connecting-IP")}:${client}` };
   return null;
 }

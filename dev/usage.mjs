@@ -47,13 +47,16 @@ const days = new Map();
 const firstSeen = new Map();
 for (const { day, client, event, action, user } of pairs) {
   const date = day.slice(0, 10);
-  const counts = days.get(date) ?? { chatgpt: new Set(), chatgptWorked: new Set(), connected: new Set(), used: new Set(), codexWorked: new Set(), hasKinds: false };
+  const counts = days.get(date) ?? { chatgpt: new Set(), chatgptWorked: new Set(), codexApp: new Set(), codexAppWorked: new Set(), connected: new Set(), used: new Set(), codexWorked: new Set(), hasKinds: false };
   const worked = action === "read" || action === "edit";
   if (action) counts.hasKinds = true;
   if (client === "chatgpt") {
     counts.chatgpt.add(user);
     if (worked) counts.chatgptWorked.add(user);
     if (!firstSeen.has(user) || date < firstSeen.get(user)) firstSeen.set(user, date);
+  } else if (client === "codex-app") {
+    counts.codexApp.add(user);
+    if (worked) counts.codexAppWorked.add(user);
   } else if (event === "connect") counts.connected.add(user);
   else {
     counts.used.add(user);
@@ -63,15 +66,15 @@ for (const { day, client, event, action, user } of pairs) {
 }
 
 const pad = (value, width) => String(value).padStart(width);
-console.log("day (UTC)   ChatGPT  new  returning | worked on a doc  returning who worked | Codex connected  used a tool  worked on a doc");
+console.log("day (UTC)   ChatGPT  new  returning | worked on a doc  returning who worked | Codex app  worked | Codex direct connected  used a tool  worked on a doc");
 for (const date of [...days.keys()].sort()) {
-  const { chatgpt, chatgptWorked, connected, used, codexWorked, hasKinds } = days.get(date);
+  const { chatgpt, chatgptWorked, codexApp, codexAppWorked, connected, used, codexWorked, hasKinds } = days.get(date);
   const fresh = [...chatgpt].filter((user) => firstSeen.get(user) === date).length;
   const returningWorked = [...chatgptWorked].filter((user) => firstSeen.get(user) !== date).length;
   const worked = hasKinds ? pad(chatgptWorked.size, 14) : pad("n/a", 14);
   const retWorked = hasKinds ? pad(`${returningWorked} of ${chatgpt.size - fresh}`, 20) : pad("n/a", 20);
   const codexWork = hasKinds ? pad(codexWorked.size, 15) : pad("n/a", 15);
-  console.log(`${date}  ${pad(chatgpt.size, 7)}  ${pad(fresh, 3)}  ${pad(chatgpt.size - fresh, 9)} | ${worked}  ${retWorked} | ${pad(connected.size, 15)}  ${pad(used.size, 11)}  ${codexWork}`);
+  console.log(`${date}  ${pad(chatgpt.size, 7)}  ${pad(fresh, 3)}  ${pad(chatgpt.size - fresh, 9)} | ${worked}  ${retWorked} | ${pad(codexApp.size, 9)}  ${pad(codexAppWorked.size, 6)} | ${pad(connected.size, 22)}  ${pad(used.size, 11)}  ${codexWork}`);
 }
 console.log(`\nChatGPT users ever: ${firstSeen.size}`);
 
@@ -82,7 +85,7 @@ const lastHour = await query(`
   GROUP BY client, event
   FORMAT JSON`);
 const hour = (client, event) => lastHour.find((row) => row.client === client && row.event === event)?.users ?? 0;
-console.log(`Last hour: ${hour("chatgpt", "tool-call")} ChatGPT users · ${hour("codex-desktop", "connect")} Codex connected · ${hour("codex-desktop", "tool-call")} Codex used a tool`);
+console.log(`Last hour: ${hour("chatgpt", "tool-call")} ChatGPT users · ${hour("codex-app", "tool-call")} Codex app users · ${hour("codex-desktop", "connect")} Codex direct connected · ${hour("codex-desktop", "tool-call")} Codex direct used a tool`);
 const failures = await query(`
   SELECT toStartOfInterval(timestamp, INTERVAL '1' DAY) AS day, blob3 AS reason, blob4 AS place, blob1 AS client,
     SUM(_sample_interval) AS failures, count(DISTINCT index1) AS users
@@ -117,5 +120,6 @@ for (const { size, page, loads, median, p90, p90Start, p90Read, p90Show, p90Conn
 }
 console.log("\nChatGPT: exact users who called a tool; new means first seen since counting began on Oct 13, 2026.");
 console.log("Worked on a doc: the model read (inspect, project) or edited the document, not only opened it.");
-console.log("Codex desktop: installs estimated per day by network and version, so new and returning cannot be told apart.");
+console.log("Codex app: exact users of the Codex app connector, counted from Nov 9, 2026. Before that they were counted as ChatGPT users.");
+console.log("Codex direct: installs estimated per day by network and version, so new and returning cannot be told apart.");
 console.log("Failures: fixed labels only, never error text. Browser requests carry no user ID, so their users show as -.");
