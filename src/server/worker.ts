@@ -23,28 +23,28 @@ interface Env extends UsageEnv {
 
 // The Worker names a relay after its session and tells the relay that name here.
 const RELAY_NAME = "X-Relay-Name";
-const MAX_EXPORT_BYTES = 20 * 1024 * 1024;
-const MAX_PENDING_EXPORT_BYTES = 60 * 1024 * 1024;
+// A copy waits in memory, and an isolate has 128 MB for the code and every copy in it.
+const MAX_EXPORT_BYTES = 60 * 1024 * 1024;
 
 /**
  * The Codex app cancels downloads that start inside the editor, so the editor
  * sends the edited copy here and the host opens the link in the user's browser.
- * A copy lives in memory for 90 seconds, downloads once, and is never logged.
- * This is its own class because a running relay kept its old code after a deploy,
- * and the copies should not share the relay's memory.
+ * Each copy has its own object, named after its link, so a large copy never
+ * blocks another user's copy. A copy lives in memory for 90 seconds, downloads
+ * once, and is never logged. This is its own class because a running relay kept
+ * its old code after a deploy, and the copies should not share the relay's memory.
  */
 export class ExportCopies {
-  private readonly exports = new Map<string, { bytes: ArrayBuffer; name: string }>();
+  private copy?: { bytes: ArrayBuffer; name: string };
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const headers = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST", "Access-Control-Allow-Headers": "Content-Type", "Cache-Control": "no-store" };
     if (request.method === "OPTIONS") return new Response(null, { headers });
     if (request.method === "GET" && url.pathname.startsWith("/exports/")) {
-      const token = url.pathname.slice("/exports/".length);
-      const copy = this.exports.get(token);
+      const copy = this.copy;
       if (!copy) return new Response(null, { status: 404 });
-      this.exports.delete(token);
+      this.copy = undefined;
       return new Response(copy.bytes, {
         headers: {
           "Content-Type": "application/octet-stream",
@@ -55,13 +55,13 @@ export class ExportCopies {
       });
     }
     if (request.method !== "POST" || url.pathname !== "/exports") return new Response(null, { status: 405, headers });
+    // Refuse a large copy before it is read into memory.
+    if (Number(request.headers.get("Content-Length")) > MAX_EXPORT_BYTES) return new Response(null, { status: 413, headers });
     const bytes = await request.arrayBuffer();
-    const pending = [...this.exports.values()].reduce((total, copy) => total + copy.bytes.byteLength, 0);
-    if (bytes.byteLength > MAX_EXPORT_BYTES || pending + bytes.byteLength > MAX_PENDING_EXPORT_BYTES) return new Response(null, { status: 413, headers });
-    const token = crypto.randomUUID();
-    this.exports.set(token, { bytes, name: (url.searchParams.get("name") ?? "document.docx").slice(0, 200) });
-    setTimeout(() => this.exports.delete(token), 90_000).unref?.();
-    return Response.json({ url: `${url.origin}/exports/${token}` }, { headers });
+    if (bytes.byteLength > MAX_EXPORT_BYTES) return new Response(null, { status: 413, headers });
+    this.copy = { bytes, name: (url.searchParams.get("name") ?? "document.docx").slice(0, 200) };
+    setTimeout(() => { this.copy = undefined; }, 90_000).unref?.();
+    return Response.json({ url: `${url.origin}/exports/${request.headers.get(RELAY_NAME)}` }, { headers });
   }
 }
 
@@ -280,7 +280,8 @@ export default {
       try {
         const isExport = path.startsWith("/exports");
         const namespace = isExport ? env.EXPORT_COPIES : env.EDITOR_RELAY;
-        const name = isExport ? "export-copies" : relayName(message, path);
+        // A new copy gets a new link, and its object is named after that link.
+        const name = isExport ? (path === "/exports" ? crypto.randomUUID() : path.split("/")[2]) : relayName(message, path);
         const forwarded = new Request(request);
         forwarded.headers.set(RELAY_NAME, name);
         const response = await namespace.get(namespace.idFromName(name)).fetch(forwarded as unknown as WorkerRequest) as unknown as Response;

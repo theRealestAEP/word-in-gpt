@@ -110,10 +110,10 @@ it("refuses to relay hosts outside OpenAI file storage", async () => {
 it("hands an exported copy out once as a download and refuses oversized copies", async () => {
   const relay = new ExportCopies();
   const bytes = new Uint8Array([80, 75, 3, 4]);
-  const made = await relay.fetch(new Request("https://worker.example/exports?name=Q3%20review.docx", { method: "POST", body: bytes }));
+  const made = await relay.fetch(named(new Request("https://worker.example/exports?name=Q3%20review.docx", { method: "POST", body: bytes }), "copy-token"));
   expect(made.headers.get("Access-Control-Allow-Origin")).toBe("*");
   const { url } = await made.json() as { url: string };
-  expect(url).toMatch(/^https:\/\/worker\.example\/exports\/[0-9a-f-]{36}$/);
+  expect(url).toBe("https://worker.example/exports/copy-token");
 
   const downloaded = await relay.fetch(new Request(url));
   expect(new Uint8Array(await downloaded.arrayBuffer())).toEqual(bytes);
@@ -122,8 +122,10 @@ it("hands an exported copy out once as a download and refuses oversized copies",
   expect(downloaded.headers.get("X-Content-Type-Options")).toBe("nosniff");
   expect((await relay.fetch(new Request(url))).status).toBe(404);
 
-  const tooBig = await relay.fetch(new Request("https://worker.example/exports", { method: "POST", body: new Uint8Array(21 * 1024 * 1024) }));
+  const tooBig = await relay.fetch(new Request("https://worker.example/exports", { method: "POST", body: new Uint8Array(61 * 1024 * 1024) }));
   expect(tooBig.status).toBe(413);
+  const declared = await relay.fetch(new Request("https://worker.example/exports", { method: "POST", headers: { "Content-Length": String(61 * 1024 * 1024) }, body: "x" }));
+  expect(declared.status).toBe(413);
   expect((await relay.fetch(new Request("https://worker.example/exports", { method: "OPTIONS" }))).status).toBe(200);
 });
 
