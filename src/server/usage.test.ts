@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { failureReason, recordFailure, recordTiming, recordToolFailure, recordUsage, toolKind } from "./usage.ts";
+import { failureReason, recordFailure, recordFileSize, recordTiming, recordToolFailure, recordUsage, toolKind } from "./usage.ts";
 
 afterEach(() => vi.useRealTimers());
 
@@ -147,5 +147,15 @@ it("stores a load's times with a coarse size and nothing that names the file", a
   expect(env.USAGE.writeDataPoint.mock.calls.map(([point]) => point)).toEqual([
     { indexes: ["editor"], blobs: ["editor", "timing", "under-10mb", "hidden"], doubles: [812, 1500, 40001, 300] },
     { indexes: ["editor"], blobs: ["editor", "timing", "under-100kb", "visible"], doubles: [0, 0, 0, 0] },
+  ]);
+});
+
+it("counts a file size as a coarse bucket", () => {
+  const env = usageEnv();
+  recordFileSize(env as never, "open", 500_000);
+  recordFileSize(env as never, "export", 30 * 1024 * 1024);
+  expect(env.USAGE.writeDataPoint.mock.calls.map(([point]) => point.blobs)).toEqual([
+    ["editor", "file-size", "under-1mb", "open"],
+    ["editor", "file-size", "under-50mb", "export"],
   ]);
 });

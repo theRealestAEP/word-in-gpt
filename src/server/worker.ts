@@ -1,6 +1,6 @@
 import { createServer, fetchOpenAIFile } from "./server.ts";
 import { EDITOR_REPLACED, EditorSessions } from "./editor-sessions.ts";
-import { recordFailure, recordTiming, recordToolFailure, recordUsage, type McpMessage, type UsageEnv } from "./usage.ts";
+import { recordFailure, recordFileSize, recordTiming, recordToolFailure, recordUsage, type McpMessage, type UsageEnv } from "./usage.ts";
 import { respondMcp } from "./tools-list.ts";
 import type { DurableObjectNamespace, DurableObjectState, ExecutionContext, Fetcher, KVNamespace, RateLimit, Request as WorkerRequest, WebSocket as WorkerWebSocket, WebSocketPair as WorkerWebSocketPair } from "@cloudflare/workers-types";
 import { z } from "zod";
@@ -73,7 +73,7 @@ export class WordEditorRelay {
   private readonly downloads = new Map<string, string>();
   private readonly sockets = new Map<string, WorkerWebSocket>();
 
-  constructor(private readonly state: DurableObjectState) {
+  constructor(private readonly state: DurableObjectState, private readonly env: UsageEnv) {
     for (const socket of state.getWebSockets()) {
       if (socket.readyState !== WebSocket.OPEN) continue;
       const { editorSessionId } = socket.deserializeAttachment();
@@ -125,6 +125,8 @@ export class WordEditorRelay {
       if (request.method === "OPTIONS") return new Response(null, { headers });
       if (request.method !== "GET") return new Response(null, { status: 405, headers });
       const response = await fetchOpenAIFile(downloadUrl).catch(() => new Response(null, { status: 502 }));
+      const size = Number(response.headers.get("Content-Length"));
+      if (response.ok && size) recordFileSize(this.env, "open", size);
       // Always bytes, never a page: this origin must not render content it relays.
       return new Response(response.body, {
         status: response.status,
@@ -282,6 +284,8 @@ export default {
         const forwarded = new Request(request);
         forwarded.headers.set(RELAY_NAME, name);
         const response = await namespace.get(namespace.idFromName(name)).fetch(forwarded as unknown as WorkerRequest) as unknown as Response;
+        const size = Number(request.headers.get("Content-Length"));
+        if (request.method === "POST" && path === "/exports" && size) recordFileSize(env, "export", size);
         if (response.status >= 400) fail(`status-${response.status}`);
         else if (message?.method === "tools/call") ctx.waitUntil(recordToolFailure(env, request, message, response.clone()).catch(() => {}));
         return response;

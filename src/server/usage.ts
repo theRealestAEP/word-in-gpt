@@ -115,6 +115,17 @@ export async function recordTiming(request: Request, env: UsageEnv): Promise<voi
   });
 }
 
+/**
+ * Count the size of one opened or exported file, as a coarse bucket with no name or content.
+ * The buckets show how many files the export limits would refuse.
+ */
+export function recordFileSize(env: UsageEnv, action: "open" | "export", bytes: number): void {
+  const mb = bytes / 1024 / 1024;
+  const bucket = mb < 1 ? "under-1mb" : mb < 10 ? "under-10mb" : mb < 20 ? "under-20mb" : mb < 50 ? "under-50mb" : mb < 100 ? "under-100mb" : "100mb-plus";
+  // blob1 = "editor", blob2 = "file-size", blob3 = size bucket, blob4 = open or export.
+  env.USAGE.writeDataPoint({ indexes: ["editor"], blobs: ["editor", "file-size", bucket, action] });
+}
+
 async function sha256Hex(text: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");

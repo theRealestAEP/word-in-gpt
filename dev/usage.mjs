@@ -118,6 +118,19 @@ console.log("size         page     loads  median     p90  | p90 start  read  sho
 for (const { size, page, loads, median, p90, p90Start, p90Read, p90Show, p90Connect } of timings) {
   console.log(`${size.padEnd(11)}  ${page.padEnd(7)}  ${pad(loads, 5)}  ${seconds(median)}  ${seconds(p90)}  | ${seconds(p90Start)}  ${seconds(p90Read)}  ${seconds(p90Show)}  ${seconds(p90Connect)}`);
 }
+const sizes = await query(`
+  SELECT blob4 AS action, blob3 AS size, SUM(_sample_interval) AS files
+  FROM word_in_gpt_usage
+  WHERE timestamp > NOW() - INTERVAL '7' DAY AND blob2 = 'file-size'
+  GROUP BY action, size
+  FORMAT JSON`);
+const sizeOrder = ["under-1mb", "under-10mb", "under-20mb", "under-50mb", "under-100mb", "100mb-plus"];
+console.log("\nFile sizes, last 7 days (exports over 20 MB are refused)");
+console.log("size         opened  exported");
+for (const size of sizeOrder) {
+  const files = (action) => sizes.find((row) => row.size === size && row.action === action)?.files ?? 0;
+  console.log(`${size.padEnd(11)}  ${pad(files("open"), 6)}  ${pad(files("export"), 8)}`);
+}
 console.log("\nChatGPT: exact users who called a tool; new means first seen since counting began on Oct 13, 2026.");
 console.log("Worked on a doc: the model read (inspect, project) or edited the document, not only opened it.");
 console.log("Codex app: exact users of the Codex app connector, counted from Nov 9, 2026. Before that they were counted as ChatGPT users.");

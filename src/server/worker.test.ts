@@ -14,9 +14,12 @@ function named(request: Request, name: string) {
   return forwarded;
 }
 
+// The relay records the size of each opened file.
+const relayEnv = { USAGE: { writeDataPoint: vi.fn() } };
+
 it("streams fallback bytes before the source finishes and expires its private link", async () => {
   vi.useFakeTimers();
-  const relay = new WordEditorRelay({ getWebSockets: () => [] } as never);
+  const relay = new WordEditorRelay({ getWebSockets: () => [] } as never, relayEnv as never);
   const client = new Client({ name: "stream-test", version: "1" });
   await client.connect(new StreamableHTTPClientTransport(new URL("https://worker.example/mcp"), {
     fetch: (input, init) => relay.fetch(named(new Request(input, init), "relay-name")),
@@ -26,7 +29,7 @@ it("streams fallback bytes before the source finishes and expires its private li
     source = controller;
     controller.enqueue(new Uint8Array([80, 75]));
   } });
-  const fetchSource = vi.fn().mockResolvedValue(new Response(body));
+  const fetchSource = vi.fn().mockResolvedValue(new Response(body, { headers: { "Content-Length": "4" } }));
   vi.stubGlobal("fetch", fetchSource);
   try {
     const fallback = await client.callTool({ name: "word_attachment_read", arguments: {
@@ -39,6 +42,7 @@ it("streams fallback bytes before the source finishes and expires its private li
     expect(JSON.stringify(fallback.structuredContent)).not.toContain(link);
     const response = await relay.fetch(new Request(link));
     expect(response.status).toBe(200);
+    expect(relayEnv.USAGE.writeDataPoint).toHaveBeenCalledWith({ indexes: ["editor"], blobs: ["editor", "file-size", "under-1mb", "open"] });
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     const reader = response.body!.getReader();
@@ -60,7 +64,7 @@ it("restores socket sessions after hibernation and routes replies only to their 
   const other = { readyState: WebSocket.OPEN, deserializeAttachment: () => ({ editorSessionId: otherId }), send: vi.fn(), close: vi.fn() };
   const closing = { readyState: WebSocket.CLOSING, deserializeAttachment: () => ({ editorSessionId: id }), send: vi.fn(), close: vi.fn() };
   // A fresh constructor receives only Cloudflare's persisted socket attachments.
-  const relay = new WordEditorRelay({ getWebSockets: () => [socket, other, closing] } as never);
+  const relay = new WordEditorRelay({ getWebSockets: () => [socket, other, closing] } as never, relayEnv as never);
   const client = new Client({ name: "socket-test", version: "1" });
   await client.connect(new StreamableHTTPClientTransport(new URL("https://worker.example/mcp"), {
     fetch: (input, init) => relay.fetch(new Request(input, init)),
@@ -84,13 +88,13 @@ it("restores socket sessions after hibernation and routes replies only to their 
 });
 
 it("requires a WebSocket upgrade and a valid private session before accepting a socket", async () => {
-  const relay = new WordEditorRelay({ getWebSockets: () => [] } as never);
+  const relay = new WordEditorRelay({ getWebSockets: () => [] } as never, relayEnv as never);
   expect((await relay.fetch(new Request("https://worker.example/editor/unknown"))).status).toBe(426);
   expect((await relay.fetch(new Request("https://worker.example/editor/unknown", { headers: { Upgrade: "websocket" } }))).status).toBe(404);
 });
 
 it("refuses to relay hosts outside OpenAI file storage", async () => {
-  const relay = new WordEditorRelay({ getWebSockets: () => [] } as never);
+  const relay = new WordEditorRelay({ getWebSockets: () => [] } as never, relayEnv as never);
   const client = new Client({ name: "relay-host-test", version: "1" });
   await client.connect(new StreamableHTTPClientTransport(new URL("https://worker.example/mcp"), {
     fetch: (input, init) => relay.fetch(new Request(input, init)),
@@ -258,7 +262,7 @@ it("tells an older editor that another editor took over its session", () => {
   const id = crypto.randomUUID();
   const older = { readyState: WebSocket.OPEN, deserializeAttachment: () => ({ editorSessionId: id }), send: vi.fn(), close: vi.fn() };
   const newer = { readyState: WebSocket.OPEN, deserializeAttachment: () => ({ editorSessionId: id }), send: vi.fn(), close: vi.fn() };
-  new WordEditorRelay({ getWebSockets: () => [older, newer] } as never);
+  new WordEditorRelay({ getWebSockets: () => [older, newer] } as never, relayEnv as never);
   expect(older.close).toHaveBeenCalledWith(4000, "Another editor took over");
   expect(newer.close).not.toHaveBeenCalled();
 });
@@ -282,7 +286,7 @@ function relaysEnv() {
     EDITOR_RELAY: {
       idFromName: (name: string) => name,
       get: (name: string) => {
-        if (!relays.has(name)) relays.set(name, new WordEditorRelay({ getWebSockets: () => [] } as never));
+        if (!relays.has(name)) relays.set(name, new WordEditorRelay({ getWebSockets: () => [] } as never, relayEnv as never));
         return relays.get(name);
       },
     },
