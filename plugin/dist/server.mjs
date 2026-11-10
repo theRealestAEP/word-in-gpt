@@ -96358,7 +96358,7 @@ for (const { kind, description } of tableValues) {
 }
 
 // src/server/server.ts
-var EDITOR_VERSION = 26;
+var EDITOR_VERSION = 27;
 var EDITOR_URI = `ui://word-in-gpt/editor-v${EDITOR_VERSION}`;
 var MCP_APP_MIME_TYPE = "text/html;profile=mcp-app";
 var fileEntrypointInput = { file: external_exports.object({ name: external_exports.string(), resourceUri: external_exports.string() }) };
@@ -96476,7 +96476,7 @@ Apply to the open document using its observed revision and editorSessionId.`,
           text: editorHtml,
           _meta: {
             "openai/ui": { preferredDisplayMode: "fullscreen", availableDisplayModes: ["inline", "fullscreen"] },
-            ui: { prefersBorder: false, csp: { connectDomains: ["https://word-in-gpt-mcp.callerinfo.workers.dev", "wss://word-in-gpt-mcp.callerinfo.workers.dev"], resourceDomains: [] } }
+            ui: { prefersBorder: false, csp: { connectDomains: ["https://word-in-gpt-mcp.callerinfo.workers.dev", "wss://word-in-gpt-mcp.callerinfo.workers.dev", "https://mcp.word-in-web.com", "wss://mcp.word-in-web.com"], resourceDomains: [] } }
           }
         }]
       })
@@ -96512,8 +96512,8 @@ Apply to the open document using its observed revision and editorSessionId.`,
   );
   if (editorLinks) {
     server.registerTool("open_word_editor", {
-      title: "Open the Word editor",
-      description: 'Open a live Word editor for a .docx, in any MCP client. In ChatGPT, use open_word_document for an attached file instead. The result has an editorSessionId for the word_document_* tools, an editorUrl, and an uploadUrl. Chat apps that show apps show the editor in the chat, where the user opens a .docx or starts a blank document. Elsewhere, give the user editorUrl to open in a browser. To load a local file, upload it once within 10 minutes with: curl -sT <path> "<uploadUrl>?name=<file name>". Call word_document_export to get the edited file back.',
+      title: "Open the Word editor (no file needed)",
+      description: 'Open the Word editor with no file: the user then opens a .docx in it, drops one in, or starts a blank document. Works in any MCP client, such as Claude. In ChatGPT, use open_word_document for an attached file instead. The result has an editorSessionId for the word_document_* tools, an editorUrl, and an uploadUrl. Chat apps that show apps show the editor in the chat, where the user opens a .docx or starts a blank document. Elsewhere, give the user editorUrl to open in a browser. To load a local file, upload it once within 10 minutes with: curl -sT <path> "<uploadUrl>?name=<file name>". Call word_document_export to get the edited file back.',
       inputSchema: { name: external_exports.string().max(200).optional().describe("File name to show, such as contract.docx.") },
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       _meta: { ui: { resourceUri: EDITOR_URI } }

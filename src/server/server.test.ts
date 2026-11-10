@@ -191,7 +191,7 @@ it("lets the editor contact only its own server", async () => {
       const { contents } = await client.readResource({ uri });
       // OpenAI's review rejects broad CSP entries such as *.blob.core.windows.net.
       expect(contents[0]._meta?.ui).toMatchObject({ csp: {
-        connectDomains: ["https://word-in-gpt-mcp.callerinfo.workers.dev", "wss://word-in-gpt-mcp.callerinfo.workers.dev"],
+        connectDomains: ["https://word-in-gpt-mcp.callerinfo.workers.dev", "wss://word-in-gpt-mcp.callerinfo.workers.dev", "https://mcp.word-in-web.com", "wss://mcp.word-in-web.com"],
         resourceDomains: [],
       } });
     }

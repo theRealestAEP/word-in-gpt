@@ -96,6 +96,9 @@ if (!standalone) {
     })
     .then(() => {
       host.notify("ui/notifications/initialized");
+      // Hosts that size an inline app by its report (Claude) would otherwise
+      // show only the status bar. ChatGPT opens the editor full screen anyway.
+      host.notify("ui/notifications/size-changed", { height: 760 });
     })
     .catch(controller.report);
 }
