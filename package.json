@@ -28,10 +28,10 @@
     "@fontsource/carlito": "^5.3.0",
     "@modelcontextprotocol/sdk": "^1.31.0",
     "@openai/mcp-extensions": "^0.1.0",
-    "@wordinweb/agent": "^0.2.5",
+    "@wordinweb/agent": "^0.2.6",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "wordinweb": "^0.3.7",
+    "wordinweb": "^0.3.9",
     "zod": "^4.6.5"
   },
   "devDependencies": {
