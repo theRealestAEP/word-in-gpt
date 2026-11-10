@@ -25,6 +25,8 @@ interface Env extends UsageEnv {
 const RELAY_NAME = "X-Relay-Name";
 // A copy waits in memory, and an isolate has 128 MB for the code and every copy in it.
 const MAX_EXPORT_BYTES = 60 * 1024 * 1024;
+// Durable Object storage holds at most 2 MB in one value.
+const UPLOAD_CHUNK_BYTES = 1024 * 1024;
 
 /**
  * The Codex app cancels downloads that start inside the editor, so the editor
@@ -118,6 +120,7 @@ export class WordEditorRelay {
       this.attachSocket(id, socket);
       return new Response(null, { status: 101, webSocket: client } as ResponseInit);
     }
+    if (url.pathname.startsWith("/uploads/")) return this.upload(request);
     if (url.pathname.startsWith("/attachments/")) {
       const downloadUrl = this.downloads.get(url.pathname.slice("/attachments/".length));
       if (!downloadUrl) return new Response(null, { status: 404 });
@@ -141,8 +144,51 @@ export class WordEditorRelay {
       this.downloads.set(name, downloadUrl);
       setTimeout(() => this.downloads.delete(name), 90_000).unref?.();
       return `${url.origin}/attachments/${name}`;
-    }, id => `${url.protocol === "https:" ? "wss:" : "ws:"}//${url.host}/editor/${id}`, () => name);
+    }, id => `${url.protocol === "https:" ? "wss:" : "ws:"}//${url.host}/editor/${id}`, () => name,
+    id => ({ editorUrl: `${url.origin}/edit#${id}`, uploadUrl: `${url.origin}/uploads/${id}` }));
     return respondMcp(server, request);
+  }
+
+  /**
+   * A coding agent uploads the user's .docx here once, and the editor reads it
+   * once. The copy waits in this object's storage, not in memory, because the
+   * user may open the editor link minutes later and an idle object leaves memory.
+   * It is deleted when the editor reads it, or after 10 minutes.
+   */
+  private async upload(request: Request): Promise<Response> {
+    const headers = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, PUT", "Cache-Control": "no-store" };
+    const storage = this.state.storage;
+    if (request.method === "OPTIONS") return new Response(null, { headers });
+    if (request.method === "PUT") {
+      // A refusal drops the body unread, so the runtime does not keep reading it.
+      const refuse = async (text: string, status: number) => { await request.body?.cancel(); return new Response(text, { status, headers }); };
+      if (Number(request.headers.get("Content-Length")) > MAX_EXPORT_BYTES) return refuse("The file is larger than 60 MB.\n", 413);
+      if (await storage.get("upload")) return refuse("This upload link was already used.\n", 409);
+      const bytes = new Uint8Array(await request.arrayBuffer());
+      if (bytes.byteLength > MAX_EXPORT_BYTES) return new Response("The file is larger than 60 MB.\n", { status: 413, headers });
+      const name = (new URL(request.url).searchParams.get("name") ?? "Document.docx").slice(0, 200);
+      const chunks: Record<string, Uint8Array> = {};
+      for (let i = 0; i * UPLOAD_CHUNK_BYTES < bytes.byteLength; i++) chunks[`chunk:${i}`] = bytes.slice(i * UPLOAD_CHUNK_BYTES, (i + 1) * UPLOAD_CHUNK_BYTES);
+      const keys = Object.keys(chunks);
+      // One put takes at most 128 keys.
+      for (let i = 0; i < keys.length; i += 100) await storage.put(Object.fromEntries(keys.slice(i, i + 100).map(key => [key, chunks[key]])));
+      await storage.put("upload", { name, chunks: keys.length });
+      await storage.setAlarm(Date.now() + 10 * 60_000);
+      return new Response("Uploaded. Open the editor link to see the document.\n", { headers });
+    }
+    if (request.method !== "GET") return new Response(null, { status: 405, headers });
+    const upload = await storage.get<{ name: string; chunks: number }>("upload");
+    if (!upload) return new Response(null, { status: 404, headers });
+    const parts = await storage.get<Uint8Array>(Array.from({ length: upload.chunks }, (_, i) => `chunk:${i}`));
+    const bytes = new Uint8Array([...parts.values()].reduce((total, part) => total + part.byteLength, 0));
+    let offset = 0;
+    for (let i = 0; i < upload.chunks; i++) { bytes.set(parts.get(`chunk:${i}`)!, offset); offset += parts.get(`chunk:${i}`)!.byteLength; }
+    await storage.deleteAll();
+    return new Response(bytes, { headers: { ...headers, "Content-Type": "application/octet-stream", "X-File-Name": encodeURIComponent(upload.name), "Access-Control-Expose-Headers": "X-File-Name" } });
+  }
+
+  async alarm(): Promise<void> {
+    await this.state.storage.deleteAll();
   }
 }
 
@@ -215,6 +261,17 @@ async function answerPolling(request: Request, env: Env): Promise<Response | nul
   return respondMcp(createServer(html, iconSvg), request);
 }
 
+/** The editor as a page of its own, for MCP clients that cannot show it in the chat. */
+async function editorPage(env: Env): Promise<Response> {
+  editorHtml ??= env.ASSETS.fetch("https://assets/app.html").then(response => response.text());
+  const html = await editorHtml.catch((error: unknown) => {
+    editorHtml = undefined;
+    throw error;
+  });
+  // The session ID stays in the URL fragment, which browsers never send to a server.
+  return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer", "Cache-Control": "no-cache" } });
+}
+
 /** The relay for a request: its session, its attachment link, or a new relay. */
 function relayName(message: McpMessage | null, path: string): string {
   const name = message ? message.params?.arguments?.editorSessionId : path.split("/")[2];
@@ -248,7 +305,8 @@ export default {
         headers: { "Content-Type": "text/plain; charset=utf-8" },
       });
     }
-    if (path === "/mcp" || path.startsWith("/attachments/") || path.startsWith("/editor/") || path === "/exports" || path.startsWith("/exports/") || path === "/timing") {
+    if (path === "/edit" && request.method === "GET") return editorPage(env);
+    if (path === "/mcp" || path.startsWith("/uploads/") || path.startsWith("/attachments/") || path.startsWith("/editor/") || path === "/exports" || path.startsWith("/exports/") || path === "/timing") {
       const route = path.split("/")[1];
       // A limiter outage must not take the service down with it.
       const allowed = await withinRateLimit(request, env, path).catch((error: unknown) => {
@@ -287,6 +345,7 @@ export default {
         const response = await namespace.get(namespace.idFromName(name)).fetch(forwarded as unknown as WorkerRequest) as unknown as Response;
         const size = Number(request.headers.get("Content-Length"));
         if (request.method === "POST" && path === "/exports" && size) recordFileSize(env, "export", size);
+        if (request.method === "PUT" && path.startsWith("/uploads/") && size) recordFileSize(env, "open", size);
         if (response.status >= 400) fail(`status-${response.status}`);
         else if (message?.method === "tools/call") ctx.waitUntil(recordToolFailure(env, request, message, response.clone()).catch(() => {}));
         return response;

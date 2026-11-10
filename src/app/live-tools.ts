@@ -23,6 +23,14 @@ export const LIVE_TOOLS = AgentDocument.create()
         : ""),
   }));
 
+/** Handled by the editor itself: a one-time link to the edited file, for agents that save to disk. */
+export const EXPORT_TOOL = {
+  name: "word_document_export",
+  description: "Get a one-time download link to the edited .docx. The link works once, within 90 seconds. Download it with: curl -so <path> <url>",
+  inputSchema: { type: "object", properties: {}, additionalProperties: false },
+};
+LIVE_TOOLS.push(EXPORT_TOOL as (typeof LIVE_TOOLS)[number]);
+
 export type LiveToolCall = (name: string, args: Record<string, unknown>) => Promise<unknown>;
 
 /** Runs the live tools against one open document. */

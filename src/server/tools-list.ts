@@ -19,7 +19,9 @@ export async function respondMcp(server: McpServer, request: Request): Promise<R
  * costs about 15 ms of CPU per request.
  */
 export async function toolsListResult(): Promise<string> {
-  const response = await respondMcp(createServer("", ""), new Request("http://localhost/mcp", {
+  // The hosted relay gives editor links, which adds open_word_editor to the list.
+  const hosted = createServer("", "", undefined, undefined, undefined, undefined, undefined, () => ({ editorUrl: "", uploadUrl: "" }));
+  const response = await respondMcp(hosted, new Request("http://localhost/mcp", {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),

@@ -1,5 +1,5 @@
 import { AgentDocument, LocalDocumentSession } from "@wordinweb/agent";
-import { host, readFile, writeFile, downloadDocx, isUploadedFile, type FileSnapshot, type HostFile } from "./host.ts";
+import { host, readFile, writeFile, downloadDocx, exportLink, isUploadedFile, NeedsFile, provideFile, standalone, type FileSnapshot, type HostFile } from "./host.ts";
 import { liveToolHandler, type LiveToolCall } from "./live-tools.ts";
 import { selectionContext, type SelectionRange } from "./selection.ts";
 
@@ -19,6 +19,8 @@ export type EditorState = {
   /** The file changed on disk while this view had unsaved edits. */
   conflict: boolean;
   connection: string;
+  /** The editor waits for the user to choose a .docx or start a blank one. */
+  needsFile: boolean;
 };
 
 /**
@@ -30,7 +32,7 @@ export type EditorState = {
  * edits. Then the user chooses which version to keep.
  */
 export class EditorController {
-  state: EditorState = { file: null, doc: null, status: "Waiting for a file", conflict: false, connection: "Connecting chat…" };
+  state: EditorState = { file: null, doc: null, status: "Waiting for a file", conflict: false, connection: "Connecting chat…", needsFile: false };
   private readonly listeners = new Set<() => void>();
   private etag: string | null = null;
   private writable = false;
@@ -78,6 +80,7 @@ export class EditorController {
   }
 
   private async updateModelContext(selection = ""): Promise<void> {
+    if (standalone) return; // No chat host to tell.
     await host.request("ui/update-model-context", {
       content: [{ type: "text", text: this.editorContext + selection }],
     });
@@ -95,17 +98,38 @@ export class EditorController {
       if (!file.resourceUri.startsWith("word-local://") && !isUploadedFile(file.resourceUri)) await host.request("resources/subscribe", { uri: file.resourceUri });
       const started = performance.now();
       const snapshot = await readFile(file.resourceUri);
+      if (snapshot.name) this.set({ file: { ...file, name: snapshot.name } });
       const read = performance.now();
       this.show(snapshot);
       this.loadTiming = { read: read - started, show: performance.now() - read, bytes: snapshot.bytes.byteLength };
     } catch (error) {
+      if (error instanceof NeedsFile) {
+        this.set({ needsFile: true, status: error.message, connection: "Waiting for a file" });
+        return;
+      }
       this.loadError = error instanceof Error ? error.message : String(error);
       this.setConnection("Document unavailable");
       throw error;
     }
   }
 
+  /** The user chose a .docx, or a blank document, for an editor that waits for a file. */
+  async chooseFile(bytes: Uint8Array, name: string): Promise<void> {
+    const file = this.state.file!;
+    const { connection } = this.state;
+    provideFile(file.resourceUri, bytes);
+    this.set({ needsFile: false, file: { ...file, name } });
+    await this.open({ ...file, name });
+    this.setConnection(connection); // The chat connection is unchanged.
+  }
+
   async callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
+    if (!this.state.doc && this.state.needsFile) throw new Error("The user has not chosen a document yet. Ask them to open a .docx or start a blank document in the editor, or upload one to the uploadUrl, then try again.");
+    if (name === "word_document_export" && this.state.doc) {
+      await this.flush();
+      const url = await exportLink(this.state.file!, this.state.doc.session.doc.save());
+      return { url, name: this.state.file!.name, note: "The link works once, within 90 seconds." };
+    }
     if (!this.state.doc) {
       throw new Error(this.loadError
         ? `The document could not be opened: ${this.loadError}`
@@ -163,7 +187,9 @@ export class EditorController {
     const session = new LocalDocumentSession(snapshot.bytes);
     // Model edits (and toolbar commands) go through session.submit, which notifies subscribers.
     session.subscribe(this.noteEdit);
-    const agent = AgentDocument.connect(session, { provenance: { author: "ChatGPT" } });
+    // open_word_editor serves any MCP client, so its edits carry a neutral author.
+    const author = this.state.file!.resourceUri.startsWith("word-session://") ? "AI Agent" : "ChatGPT";
+    const agent = AgentDocument.connect(session, { provenance: { author } });
     this.etag = snapshot.etag;
     this.writable = snapshot.writable;
     this.edits = 0;

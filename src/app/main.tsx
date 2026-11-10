@@ -12,7 +12,7 @@ import "./blob-images.ts";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
 import { EditorController } from "./controller.ts";
-import { host, isHostFile, receiveUpload, reportTiming } from "./host.ts";
+import { host, isHostFile, receiveUpload, reportTiming, standalone } from "./host.ts";
 import { LIVE_TOOLS } from "./live-tools.ts";
 import { connectServerTools } from "./server-tools.ts";
 
@@ -78,7 +78,16 @@ host.handle("ui/resource-teardown", async () => {
 });
 host.handle("ping", () => ({}));
 
-if (window.parent !== window) {
+// A page of its own (/edit#<editorSessionId>) joins the session named in its link.
+if (standalone) {
+  const editorSessionId = location.hash.slice(1);
+  if (/^[0-9a-f-]{36}$/i.test(editorSessionId)) openFile({ name: "Document.docx", resourceUri: `word-session://${editorSessionId}` }, editorSessionId);
+  else controller.report(new Error("This link has no editor session. Ask the assistant to open the Word editor again."));
+  // A second editor link opened in this tab changes only the fragment.
+  window.addEventListener("hashchange", () => location.reload());
+}
+
+if (!standalone) {
   host
     .request("ui/initialize", {
       protocolVersion: "2026-01-26",

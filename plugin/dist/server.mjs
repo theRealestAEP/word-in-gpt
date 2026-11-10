@@ -96197,6 +96197,12 @@ var LIVE_TOOLS = AgentDocument.create().tools().filter((tool) => LIVE_TOOL_NAMES
   inputSchema,
   description: description + (name === "word_document_project" ? " Defaults to text mode: a compact content view for fast wording edits. Use project then patch; formatting inspection and capabilities are unnecessary for this path." : name === "word_document_patch" ? " Defaults to text mode: change wording while retaining existing styles. Use the revision and window from project. Choose md explicitly for heading or list changes." : "")
 }));
+var EXPORT_TOOL = {
+  name: "word_document_export",
+  description: "Get a one-time download link to the edited .docx. The link works once, within 90 seconds. Download it with: curl -so <path> <url>",
+  inputSchema: { type: "object", properties: {}, additionalProperties: false }
+};
+LIVE_TOOLS.push(EXPORT_TOOL);
 
 // src/server/editor-sessions.ts
 var failure2 = (text) => ({ isError: true, content: [{ type: "text", text }] });
@@ -96352,7 +96358,7 @@ for (const { kind, description } of tableValues) {
 }
 
 // src/server/server.ts
-var EDITOR_VERSION = 25;
+var EDITOR_VERSION = 26;
 var EDITOR_URI = `ui://word-in-gpt/editor-v${EDITOR_VERSION}`;
 var MCP_APP_MIME_TYPE = "text/html;profile=mcp-app";
 var fileEntrypointInput = { file: external_exports.object({ name: external_exports.string(), resourceUri: external_exports.string() }) };
@@ -96386,7 +96392,7 @@ var editTools = EDIT_TOOLS.map((tool) => ({
   ...tool,
   inputSchema: tool.inputSchema.extend({ editorSessionId: sessionId })
 }));
-function createServer(editorHtml, iconSvg, localFiles, sessions = editorSessions, attachmentDownloadUrl, editorSocketUrl, newSessionId) {
+function createServer(editorHtml, iconSvg, localFiles, sessions = editorSessions, attachmentDownloadUrl, editorSocketUrl, newSessionId, editorLinks) {
   const icon2 = { src: "data:image/svg+xml," + encodeURIComponent(iconSvg), mimeType: "image/svg+xml", sizes: ["any"] };
   const server = new McpServer({ name: "word-in-gpt", title: "Word in Chat", version: "0.1.4", icons: [icon2] });
   for (const tool of liveTools) {
@@ -96504,6 +96510,25 @@ Apply to the open document using its observed revision and editorSessionId.`,
       };
     }
   );
+  if (editorLinks) {
+    server.registerTool("open_word_editor", {
+      title: "Open the Word editor",
+      description: 'Open a live Word editor for a .docx, in any MCP client. In ChatGPT, use open_word_document for an attached file instead. The result has an editorSessionId for the word_document_* tools, an editorUrl, and an uploadUrl. Chat apps that show apps show the editor in the chat, where the user opens a .docx or starts a blank document. Elsewhere, give the user editorUrl to open in a browser. To load a local file, upload it once within 10 minutes with: curl -sT <path> "<uploadUrl>?name=<file name>". Call word_document_export to get the edited file back.',
+      inputSchema: { name: external_exports.string().max(200).optional().describe("File name to show, such as contract.docx.") },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      _meta: { ui: { resourceUri: EDITOR_URI } }
+    }, async ({ name }) => {
+      const editorSessionId = sessions.connect(newSessionId?.());
+      const file2 = { name: name ?? "Document.docx", resourceUri: `word-session://${editorSessionId}` };
+      const { editorUrl, uploadUrl } = editorLinks(editorSessionId);
+      return {
+        ...result({ file: file2, editorSessionId, editorUrl, uploadUrl }),
+        content: [{ type: "text", text: `Word editor session ${editorSessionId}. If the editor shows in this chat, the user opens a .docx there or starts a blank document. Otherwise give the user this link to open in a browser: ${editorUrl}
+To load a local file, upload it once within 10 minutes: curl -sT <path> "${uploadUrl}?name=<file name>"
+Then call word_document_inspect with this editorSessionId. If it says no document is open, wait for the user. Call word_document_export for a one-time download link to the edited file.` }]
+      };
+    });
+  }
   if (!localFiles) {
     server.registerTool("word_attachment_read", {
       description: "Provide an authorized attachment download for the editor when its direct browser download fails. Returns the download in private metadata.",

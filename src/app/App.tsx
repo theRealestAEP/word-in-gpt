@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { DocxToolbar, DocxView, useAgentDocumentSession, type AgentDocumentViewBinding, type DocxViewApi } from "wordinweb";
-import { localDocumentViewBinding } from "@wordinweb/agent";
+import { AgentDocument, localDocumentViewBinding } from "@wordinweb/agent";
 import type { EditorController, OpenDocument } from "./controller.ts";
 import type { PresencePosition, SelectionRange } from "./selection.ts";
 import { enableTouchSelection } from "./touch-selection.ts";
 
 export function App({ controller }: { controller: EditorController }) {
-  const { file, doc, status, conflict, connection } = useSyncExternalStore(controller.subscribe, controller.getState);
+  const { file, doc, status, conflict, connection, needsFile } = useSyncExternalStore(controller.subscribe, controller.getState);
   const [api, setApi] = useState<DocxViewApi | null>(null);
   const [selection, setSelection] = useState<SelectionRange[]>([]);
   const selectionRef = useRef<SelectionRange[]>([]);
@@ -97,9 +97,33 @@ export function App({ controller }: { controller: EditorController }) {
       {api && <DocxToolbar api={api} mode="advanced" className="word-toolbar" />}
       {doc ? (
         <DocumentView key={doc.id} doc={doc} selecting={selecting} onEdit={controller.noteEdit} onReady={setApi} onError={controller.report} onSelection={onSelection} />
+      ) : needsFile ? (
+        <ChooseFile onChoose={(bytes, name) => controller.chooseFile(bytes, name).catch(controller.report)} />
       ) : (
-        <p className="empty">Open a .docx file in ChatGPT or Codex to view and edit it here.</p>
+        <p className="empty">Open a .docx file in the chat to view and edit it here.</p>
       )}
+    </div>
+  );
+}
+
+/** Open a .docx from this device, or start a blank document. The file stays in this browser. */
+function ChooseFile({ onChoose }: { onChoose: (bytes: Uint8Array, name: string) => void }) {
+  const [dragging, setDragging] = useState(false);
+  const read = async (file: File | undefined) => {
+    if (file) onChoose(new Uint8Array(await file.arrayBuffer()), file.name);
+  };
+  return (
+    <div className={`choose-file${dragging ? " dragging" : ""}`}
+      onDragOver={event => { event.preventDefault(); setDragging(true); }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={event => { event.preventDefault(); setDragging(false); void read(event.dataTransfer.files[0]); }}>
+      <p>Drop a .docx here, or choose one. The file stays in this browser.</p>
+      <label className="choose-file-button">
+        Choose a .docx
+        <input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden
+          onChange={event => void read(event.target.files?.[0])} />
+      </label>
+      <button onClick={() => onChoose(AgentDocument.create().save(), "Document.docx")}>Start a blank document</button>
     </div>
   );
 }

@@ -8,7 +8,7 @@ import { EDIT_TOOLS } from "./edit-tools.ts";
 // The URI is the host's cache key for the UI: change it when the app changes
 // in a way an already-open editor cannot load.
 // Increment for each deployed UI change: hosts cache templates by their URI.
-const EDITOR_VERSION = 25;
+const EDITOR_VERSION = 26;
 const EDITOR_URI = `ui://word-in-gpt/editor-v${EDITOR_VERSION}`;
 const MCP_APP_MIME_TYPE = "text/html;profile=mcp-app";
 
@@ -59,7 +59,7 @@ const editTools = EDIT_TOOLS.map(tool => ({
  * files use the host's resource bridge. The stdio entry also supplies LocalFiles
  * so a model can directly launch an explicitly requested local document.
  */
-export function createServer(editorHtml: string, iconSvg: string, localFiles?: LocalFiles, sessions: EditorSessions = editorSessions, attachmentDownloadUrl?: (url: string) => string, editorSocketUrl?: (id: string) => string, newSessionId?: () => string): McpServer {
+export function createServer(editorHtml: string, iconSvg: string, localFiles?: LocalFiles, sessions: EditorSessions = editorSessions, attachmentDownloadUrl?: (url: string) => string, editorSocketUrl?: (id: string) => string, newSessionId?: () => string, editorLinks?: (id: string) => { editorUrl: string; uploadUrl: string }): McpServer {
   const icon = { src: "data:image/svg+xml," + encodeURIComponent(iconSvg), mimeType: "image/svg+xml", sizes: ["any"] };
   const server = new McpServer({ name: "word-in-gpt", title: "Word in Chat", version: "0.1.4", icons: [icon] });
 
@@ -168,6 +168,24 @@ export function createServer(editorHtml: string, iconSvg: string, localFiles?: L
       structuredContent: { file, editorSessionId },
     }; },
   );
+
+  if (editorLinks) {
+    server.registerTool("open_word_editor", {
+      title: "Open the Word editor",
+      description: "Open a live Word editor for a .docx, in any MCP client. In ChatGPT, use open_word_document for an attached file instead. The result has an editorSessionId for the word_document_* tools, an editorUrl, and an uploadUrl. Chat apps that show apps show the editor in the chat, where the user opens a .docx or starts a blank document. Elsewhere, give the user editorUrl to open in a browser. To load a local file, upload it once within 10 minutes with: curl -sT <path> \"<uploadUrl>?name=<file name>\". Call word_document_export to get the edited file back.",
+      inputSchema: { name: z.string().max(200).optional().describe("File name to show, such as contract.docx.") },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      _meta: { ui: { resourceUri: EDITOR_URI } },
+    }, async ({ name }) => {
+      const editorSessionId = sessions.connect(newSessionId?.());
+      const file = { name: name ?? "Document.docx", resourceUri: `word-session://${editorSessionId}` };
+      const { editorUrl, uploadUrl } = editorLinks(editorSessionId);
+      return {
+        ...result({ file, editorSessionId, editorUrl, uploadUrl }),
+        content: [{ type: "text" as const, text: `Word editor session ${editorSessionId}. If the editor shows in this chat, the user opens a .docx there or starts a blank document. Otherwise give the user this link to open in a browser: ${editorUrl}\nTo load a local file, upload it once within 10 minutes: curl -sT <path> "${uploadUrl}?name=<file name>"\nThen call word_document_inspect with this editorSessionId. If it says no document is open, wait for the user. Call word_document_export for a one-time download link to the edited file.` }],
+      };
+    });
+  }
 
   if (!localFiles) {
     server.registerTool("word_attachment_read", {

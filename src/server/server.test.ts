@@ -30,7 +30,7 @@ it("advertises model tools and routes calls through the app-only connection", as
   await Promise.all([server.connect(a), client.connect(b)]);
   try {
     const { tools } = await client.listTools();
-    expect(tools.filter(t => t.name.startsWith("word_document_"))).toHaveLength(4 + EDIT_TOOLS.length);
+    expect(tools.filter(t => t.name.startsWith("word_document_"))).toHaveLength(5 + EDIT_TOOLS.length);
     expect(new Set(tools.map(tool => tool.name)).size).toBe(tools.length);
     expect(new Set(tools.map(tool => tool.title ?? tool.name)).size).toBe(tools.length);
     expect(tools.some(tool => tool.name === "word_document_edit")).toBe(false);
@@ -195,5 +195,22 @@ it("lets the editor contact only its own server", async () => {
         resourceDomains: [],
       } });
     }
+  } finally { await client.close(); await server.close(); }
+});
+
+it("opens an editor for any MCP client with an editor link and an upload link", async () => {
+  const id = "00000000-0000-4000-8000-0000000000aa";
+  const server = createServer("<html>Word</html>", "<svg/>", undefined, undefined, undefined, undefined, () => id,
+    session => ({ editorUrl: `https://worker.example/edit#${session}`, uploadUrl: `https://worker.example/uploads/${session}` }));
+  const client = new Client({ name: "any-client", version: "1" });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(a), client.connect(b)]);
+  try {
+    const opened = await client.callTool({ name: "open_word_editor", arguments: { name: "contract.docx" } });
+    expect(opened.structuredContent).toEqual({
+      file: { name: "contract.docx", resourceUri: `word-session://${id}` }, editorSessionId: id,
+      editorUrl: `https://worker.example/edit#${id}`, uploadUrl: `https://worker.example/uploads/${id}`,
+    });
+    expect((opened.content as { text: string }[])[0].text).toContain(`curl -sT <path> "https://worker.example/uploads/${id}?name=<file name>"`);
   } finally { await client.close(); await server.close(); }
 });

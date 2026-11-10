@@ -406,3 +406,38 @@ it("records a load report without touching a relay", async () => {
   expect(relay).not.toHaveBeenCalled();
   expect((env as { USAGE: { writeDataPoint: ReturnType<typeof vi.fn> } }).USAGE.writeDataPoint).toHaveBeenCalledOnce();
 });
+
+function memoryStorage() {
+  const data = new Map<string, unknown>();
+  let alarm: number | null = null;
+  return {
+    data, alarm: () => alarm,
+    async get(key: string | string[]) { return Array.isArray(key) ? new Map(key.filter(k => data.has(k)).map(k => [k, data.get(k)])) : data.get(key); },
+    async put(key: string | Record<string, unknown>, value?: unknown) {
+      if (typeof key === "string") data.set(key, value);
+      else for (const [k, v] of Object.entries(key)) data.set(k, v);
+    },
+    async deleteAll() { data.clear(); },
+    async setAlarm(time: number) { alarm = time; },
+  };
+}
+
+it("keeps an agent's upload until the editor reads it once, in chunks under the storage limit", async () => {
+  const storage = memoryStorage();
+  const relay = new WordEditorRelay({ getWebSockets: () => [], storage } as never, relayEnv as never);
+  const bytes = Uint8Array.from({ length: 2.5 * 1024 * 1024 }, (_, i) => i % 251);
+  const link = "https://worker.example/uploads/session-a";
+  expect((await relay.fetch(new Request(`${link}?name=contract%20v2.docx`, { method: "PUT", body: bytes }))).status).toBe(200);
+  expect([...storage.data.keys()].filter(key => key.startsWith("chunk:"))).toHaveLength(3);
+  expect(storage.alarm()).toBeGreaterThan(Date.now());
+  expect((await relay.fetch(new Request(link, { method: "PUT", body: bytes }))).status).toBe(409);
+
+  const read = await relay.fetch(new Request(link));
+  expect(read.headers.get("X-File-Name")).toBe("contract%20v2.docx");
+  expect(new Uint8Array(await read.arrayBuffer())).toEqual(bytes);
+  expect((await relay.fetch(new Request(link))).status).toBe(404);
+
+  await relay.fetch(new Request(link, { method: "PUT", body: bytes }));
+  await relay.alarm();
+  expect(storage.data.size).toBe(0);
+});

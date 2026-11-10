@@ -258,3 +258,31 @@ it("renews an expired link when CSP sends every attachment through the server", 
   expect(fetchFile).toHaveBeenLastCalledWith("https://worker.example/attachments/new");
   expect((await readUploadedFile(file.resourceUri)).bytes).toEqual(new Uint8Array(original));
 });
+
+it("waits for the user to choose a file for an editor session, then opens it", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
+  const controller = new EditorController();
+  await controller.open({ name: "Document.docx", resourceUri: "word-session://choose-test" });
+  expect(controller.state.needsFile).toBe(true);
+  await expect(controller.callTool("word_document_inspect", { kind: "context" })).rejects.toThrow(/has not chosen a document/);
+
+  const original = await readFile(new URL("../../publication/fixtures/review.docx", import.meta.url));
+  await controller.chooseFile(new Uint8Array(original), "review.docx");
+  expect(controller.state).toMatchObject({ needsFile: false, file: { name: "review.docx" } });
+  const context: any = await controller.callTool("word_document_inspect", { kind: "context" });
+  expect(context.contents[0].blocks[0].text).toBe("Quarterly review");
+});
+
+it("opens a file an agent uploaded for an editor session, with its name, and exports a one-time link", async () => {
+  const original = await readFile(new URL("../../publication/fixtures/review.docx", import.meta.url));
+  const fetchFile = vi.fn()
+    .mockResolvedValueOnce(new Response(original, { headers: { "X-File-Name": "contract%20v2.docx" } }))
+    .mockResolvedValueOnce(Response.json({ url: "https://word-in-gpt-mcp.callerinfo.workers.dev/exports/one-time" }));
+  vi.stubGlobal("fetch", fetchFile);
+  const controller = new EditorController();
+  await controller.open({ name: "Document.docx", resourceUri: "word-session://upload-test" });
+  expect(fetchFile).toHaveBeenCalledWith("https://word-in-gpt-mcp.callerinfo.workers.dev/uploads/upload-test");
+  expect(controller.state.file!.name).toBe("contract v2.docx");
+  expect(await controller.callTool("word_document_export", {})).toMatchObject({ url: "https://word-in-gpt-mcp.callerinfo.workers.dev/exports/one-time", name: "contract v2.docx" });
+  expect(String(fetchFile.mock.calls[1][0])).toBe("https://word-in-gpt-mcp.callerinfo.workers.dev/exports?name=contract%20v2.docx");
+});

@@ -3,19 +3,35 @@ import { createAppTransport } from "@openai/mcp-extensions/app/transport";
 /** JSON-RPC link to the ChatGPT / Codex host that renders this app. */
 export const host = createAppTransport();
 
+/** The editor opened as a page of its own (/edit), with no chat host around it. */
+export const standalone = typeof window !== "undefined" && window.parent === window;
+
+// A page of its own talks to the server it came from. Inside a chat host the
+// page has no origin of its own, and its CSP allows only this server.
+const SERVER = standalone ? location.origin : "https://word-in-gpt-mcp.callerinfo.workers.dev";
+
+/** The file waits for the user to choose it, or for an agent to upload it. */
+export class NeedsFile extends Error {}
+
 /** The file the host passes when the user opens a .docx. */
 export type HostFile = { name: string; resourceUri: string };
 
 const uploadedFiles = new Map<string, FileSnapshot>();
 const uploadUrls = new Map<string, string>();
-export const isUploadedFile = (uri: string): boolean => uri.startsWith("word-upload://");
+// word-session:// is a file for open_word_editor: uploaded by an agent, or chosen by the user.
+export const isUploadedFile = (uri: string): boolean => uri.startsWith("word-upload://") || uri.startsWith("word-session://");
+
+/** Hold a file the user chose for this editor session. */
+export function provideFile(uri: string, bytes: Uint8Array): void {
+  uploadedFiles.set(uri, { bytes, etag: "0", writable: true });
+}
 
 export function receiveUpload(file: HostFile, blob?: string, downloadUrl?: string): void {
   if (blob) uploadedFiles.set(file.resourceUri, { bytes: base64ToBytes(blob), etag: "0", writable: true });
   if (downloadUrl) uploadUrls.set(file.resourceUri, downloadUrl);
 }
 
-export type FileSnapshot = { bytes: Uint8Array; etag: string | null; writable: boolean };
+export type FileSnapshot = { bytes: Uint8Array; etag: string | null; writable: boolean; name?: string };
 
 export type WriteResult =
   | { outcome: "saved"; etag: string }
@@ -56,6 +72,15 @@ export async function readFile(uri: string): Promise<FileSnapshot> {
   if (isUploadedFile(uri)) {
     const snapshot = uploadedFiles.get(uri);
     if (snapshot) return snapshot;
+    if (uri.startsWith("word-session://")) {
+      const response = await fetch(`${SERVER}/uploads/${uri.slice("word-session://".length)}`);
+      if (response.status === 404) throw new NeedsFile("Choose a .docx file, or start a blank document.");
+      if (!response.ok) throw new Error(`The uploaded file could not be read (${response.status}).`);
+      const name = response.headers.get("X-File-Name");
+      const uploaded = { bytes: new Uint8Array(await response.arrayBuffer()), etag: "0", writable: true, ...(name ? { name: decodeURIComponent(name) } : {}) };
+      uploadedFiles.set(uri, uploaded);
+      return uploaded;
+    }
     const openai = (window as unknown as { openai?: {
       toolResponseMetadata?: { mcp_tool_result?: UploadToolResult; call_tool_result?: UploadToolResult };
       getFileDownloadUrl?: (input: { fileId: string }) => Promise<{ downloadUrl: string }>;
@@ -140,8 +165,8 @@ export function writeFile(uri: string, bytes: Uint8Array, ifMatch: string | null
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-const EXPORT_URL = "https://word-in-gpt-mcp.callerinfo.workers.dev/exports";
-const TIMING_URL = "https://word-in-gpt-mcp.callerinfo.workers.dev/timing";
+const EXPORT_URL = `${SERVER}/exports`;
+const TIMING_URL = `${SERVER}/timing`;
 
 /** Report how long one editor load took. Numbers and a flag only; a lost report changes nothing. */
 export function reportTiming(timing: { page: number; read: number; show: number; connect: number; bytes: number; hidden: boolean }): void {
@@ -157,6 +182,8 @@ export function reportTiming(timing: { page: number; read: number; show: number;
  * other paths failed returns a warning for the status bar.
  */
 export async function downloadDocx(file: HostFile, bytes: Uint8Array): Promise<string | null> {
+  // A page of its own has no host to ask, and its browser downloads work.
+  if (standalone) { exportThroughBrowser(file, bytes); return null; }
   const failures: string[] = [];
   for (const exportCopy of [exportThroughLink, exportThroughChatGpt, exportThroughBrowser]) {
     try {
@@ -169,10 +196,15 @@ export async function downloadDocx(file: HostFile, bytes: Uint8Array): Promise<s
   throw new Error(`Export failed: ${failures.join("; ")}. Keep this editor open to keep your edits.`);
 }
 
-async function exportThroughLink(file: HostFile, bytes: Uint8Array): Promise<void> {
+/** Put a copy on the server for one download within 90 seconds, and return its link. */
+export async function exportLink(file: HostFile, bytes: Uint8Array): Promise<string> {
   const response = await fetch(`${EXPORT_URL}?name=${encodeURIComponent(file.name)}`, { method: "POST", body: new Uint8Array(bytes) });
   if (!response.ok) throw new Error(`the server refused the copy (${response.status})`);
-  const { url } = await response.json() as { url: string };
+  return (await response.json() as { url: string }).url;
+}
+
+async function exportThroughLink(file: HostFile, bytes: Uint8Array): Promise<void> {
+  const url = await exportLink(file, bytes);
   const opened = await host.request<{ isError?: boolean }>("ui/open-link", { url }, FILE_TIMEOUT_MS);
   if (opened?.isError) throw new Error("the host would not open the download link");
 }
@@ -201,11 +233,29 @@ function exportThroughBrowser(file: HostFile, bytes: Uint8Array): void {
 }
 
 export async function callServer<T>(name: string, args: Record<string, unknown> = {}): Promise<T> {
+  if (standalone) return callServerDirectly<T>(name, args);
   const result = await host.request<{ content: Array<{ text: string }>; structuredContent?: T; isError?: boolean }>(
     "tools/call", { name, arguments: args }, FILE_TIMEOUT_MS,
   );
   if (result.isError) throw new Error(result.content[0].text);
   return result.structuredContent ?? JSON.parse(result.content[0].text);
+}
+
+/** A page of its own calls the server's MCP endpoint itself. */
+async function callServerDirectly<T>(name: string, args: Record<string, unknown>): Promise<T> {
+  const response = await fetch(`${SERVER}/mcp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
+  });
+  if (!response.ok) throw new Error(`The server answered ${response.status}.`);
+  const text = await response.text();
+  // The answer is JSON, or one server-sent event that holds the JSON.
+  const json = text.startsWith("{") ? text : text.split("\n").find(line => line.startsWith("data: "))!.slice(6);
+  const { result, error } = JSON.parse(json) as { result?: { content: Array<{ text: string }>; structuredContent?: T; isError?: boolean }; error?: { message: string } };
+  if (error) throw new Error(error.message);
+  if (result!.isError) throw new Error(result!.content[0].text);
+  return result!.structuredContent ?? JSON.parse(result!.content[0].text);
 }
 
 function base64ToBytes(base64: string): Uint8Array {

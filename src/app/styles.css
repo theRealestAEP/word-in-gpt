@@ -188,3 +188,30 @@ body {
 .empty {
   padding: 24px;
 }
+
+.choose-file {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin: 24px;
+  padding: 40px 16px;
+  border: 2px dashed var(--color-border-primary, #dadce0);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.choose-file.dragging {
+  border-color: var(--color-text-primary, CanvasText);
+}
+
+.choose-file-button,
+.choose-file button {
+  padding: 6px 14px;
+  border: 1px solid var(--color-border-primary, #dadce0);
+  border-radius: 6px;
+  color: var(--color-text-primary, CanvasText);
+  background: var(--color-background-secondary, Canvas);
+  font: inherit;
+  cursor: pointer;
+}
