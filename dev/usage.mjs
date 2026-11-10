@@ -125,7 +125,7 @@ const sizes = await query(`
   GROUP BY action, size
   FORMAT JSON`);
 const sizeOrder = ["under-1mb", "under-10mb", "under-20mb", "under-50mb", "under-100mb", "100mb-plus"];
-console.log("\nFile sizes, last 7 days (exports over 20 MB are refused)");
+console.log("\nFile sizes, last 7 days (exports over 60 MB are refused)");
 console.log("size         opened  exported");
 for (const size of sizeOrder) {
   const files = (action) => sizes.find((row) => row.size === size && row.action === action)?.files ?? 0;
