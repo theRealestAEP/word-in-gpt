@@ -70,7 +70,9 @@ export class EditorController {
       ? "This is an uploaded copy. Changes stay in this editor; Download DOCX exports an edited copy."
       : "Changes autosave through the host.";
     this.editorContext = `Word editor: ${this.state.file?.name}. Use the word_document_* MCP tools with editorSessionId ${editorSessionId}. Commands operate on this open document. ${save}`;
-    await this.updateModelContext();
+    // A host can refuse the context update. The model already has the session
+    // ID from the tool result, so commands still reach this editor.
+    await this.updateModelContext().catch(() => {});
     this.setConnection("Chat connected");
   }
 

@@ -236,6 +236,17 @@ it("answers the model at once with the reason when an attachment cannot load", a
     .rejects.toThrow("The document could not be opened: The attachment could not be restored. Attach the DOCX again.");
 });
 
+it("stays connected when the host refuses the model context update", async () => {
+  const original = await readFile(new URL("../../publication/fixtures/review.docx", import.meta.url));
+  const file = { name: "review.docx", resourceUri: "word-upload://review-context-refused" };
+  receiveUpload(file, original.toString("base64"));
+  const controller = new EditorController();
+  await controller.open(file);
+  request.mockRejectedValueOnce(new Error("Refused"));
+  await controller.connectChat("00000000-0000-4000-8000-000000000003");
+  expect(controller.state.connection).toBe("Chat connected");
+});
+
 it("renews an expired link when CSP sends every attachment through the server", async () => {
   const original = await readFile(new URL("../../publication/fixtures/review.docx", import.meta.url));
   const file = { name: "review.docx", resourceUri: "word-upload://review-csp-expired" };
