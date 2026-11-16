@@ -144,7 +144,7 @@ export class WordEditorRelay {
       this.downloads.set(name, downloadUrl);
       setTimeout(() => this.downloads.delete(name), 90_000).unref?.();
       return `${url.origin}/attachments/${name}`;
-    }, id => `${url.protocol === "https:" ? "wss:" : "ws:"}//${url.host}/editor/${id}`, () => name,
+    }, id => `${url.protocol === "https:" ? "wss:" : "ws:"}//${socketHost(url.host)}/editor/${id}`, () => name,
     id => ({ editorUrl: `${url.origin}/edit#${id}`, uploadUrl: `${url.origin}/uploads/${id}` }));
     return respondMcp(server, request);
   }
@@ -273,6 +273,12 @@ async function editorPage(env: Env): Promise<Response> {
 }
 
 /** The relay for a request: its session, its attachment link, or a new relay. */
+// Some VPNs and proxies never deliver the WebSocket handshake reply from
+// workers.dev. The editor sockets use the custom domain to test whether it does better.
+function socketHost(host: string): string {
+  return host.endsWith(".workers.dev") ? "mcp.word-in-web.com" : host;
+}
+
 function relayName(message: McpMessage | null, path: string): string {
   const name = message ? message.params?.arguments?.editorSessionId : path.split("/")[2];
   return typeof name === "string" && name ? name : crypto.randomUUID();
@@ -318,7 +324,8 @@ export default {
         return new Response("Too many requests\n", { status: 429, headers: { "Retry-After": "10" } });
       }
       if (path === "/timing") {
-        ctx.waitUntil(recordTiming(request, env).catch(() => {}));
+        // The body cannot be read after the response is sent, so this runs first.
+        await recordTiming(request, env).catch(() => {});
         return new Response(null, { status: 204, headers: { "Access-Control-Allow-Origin": "*" } });
       }
       // Counting must never slow or fail a request, so it runs after the response.

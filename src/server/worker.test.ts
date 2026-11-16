@@ -269,8 +269,8 @@ it("tells an older editor that another editor took over its session", () => {
   expect(newer.close).not.toHaveBeenCalled();
 });
 
-function toolCall(name: string, args: Record<string, unknown>) {
-  return new Request("https://worker.example/mcp", {
+function toolCall(name: string, args: Record<string, unknown>, origin = "https://worker.example") {
+  return new Request(`${origin}/mcp`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", "User-Agent": "openai-mcp/1.0.0" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 8, method: "tools/call", params: { name, arguments: args, _meta: { "openai/subject": "user-abc" } } }),
@@ -304,6 +304,8 @@ it("gives each opened document its own relay and sends later calls to that relay
   expect([...relays.keys()]).toEqual([first, second]);
   const connected = await worker.fetch(toolCall("word_editor_connect", { editorSessionId: first }), env, ctx);
   expect(await connected.json()).toMatchObject({ result: { structuredContent: { editorSessionId: first, webSocketUrl: `wss://worker.example/editor/${first}` } } });
+  const viaWorkersDev = await worker.fetch(toolCall("word_editor_connect", { editorSessionId: first }, "https://word-in-gpt-mcp.callerinfo.workers.dev"), env, ctx);
+  expect(await viaWorkersDev.json()).toMatchObject({ result: { structuredContent: { webSocketUrl: `wss://mcp.word-in-web.com/editor/${first}` } } });
   expect(relays.size).toBe(2);
   const socket = await worker.fetch(new Request(`https://worker.example/editor/${second}`), env, ctx);
   expect(socket.status).toBe(426);
@@ -396,12 +398,10 @@ it("names the app connector when a local path reaches the hosted open tool", asy
   expect(relay).toHaveBeenCalledTimes(1);
 });
 
-it("records a load report without touching a relay", async () => {
+it("records a load report before it answers, because the body is unreadable after that", async () => {
   const { env, relay } = pollingEnv({});
-  const waited: Promise<unknown>[] = [];
   const report = new Request("https://worker.example/timing", { method: "POST", body: JSON.stringify({ page: 1, read: 2, show: 3, connect: 4, bytes: 5, hidden: false }) });
-  const response = await worker.fetch(report, env, { waitUntil: (promise: Promise<unknown>) => waited.push(promise) } as never);
-  await Promise.all(waited);
+  const response = await worker.fetch(report, env, { waitUntil: vi.fn() } as never);
   expect(response.status).toBe(204);
   expect(relay).not.toHaveBeenCalled();
   expect((env as { USAGE: { writeDataPoint: ReturnType<typeof vi.fn> } }).USAGE.writeDataPoint).toHaveBeenCalledOnce();
